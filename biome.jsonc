@@ -1,0 +1,80 @@
+{
+	"$schema": "https://biomejs.dev/schemas/1.8.0/schema.json",
+	"formatter": {
+		"enabled": false
+	},
+	"json": {
+		"parser": {
+			"allowComments": true,
+			"allowTrailingCommas": true
+		}
+	},
+	"organizeImports": {
+		"enabled": true,
+		"ignore": [
+			"packages/rspack/src/config/schema.check.js",
+			"packages/**/etc/**/*",
+			"crates/**/*",
+			"tests/**/*",
+			"packages/rspack-test-tools/template/**/*",
+			"packages/rspack-test-tools/tests/**/*",
+			"packages/rspack-test-tools/src/helper/legacy/**/*",
+			"packages/playground/**/*",
+			// --- ignore runtime code in browser
+			"packages/rspack/hot",
+			"packages/rspack-dev-server/client",
+			"packages/rspack/src/container/default.runtime.js"
+		]
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"a11y": {
+				"useKeyWithClickEvents": "off"
+			},
+			"complexity": {
+				"noStaticOnlyClass": "off",
+				"noThisInStatic": "off",
+				"noBannedTypes": "off"
+			},
+			"correctness": {
+				"noConstructorReturn": "off",
+				"noVoidTypeReturn": "off"
+			},
+			"style": {
+				"noNonNullAssertion": "off"
+			},
+			"performance": {
+				"noDelete": "off"
+			},
+			"suspicious": {
+				"noFallthroughSwitchClause": "off",
+				"noConfusingVoidType": "off",
+				"noPrototypeBuiltins": "off",
+				"noImplicitAnyLet": "off",
+				"noAssignInExpressions": "off",
+				"noArrayIndexKey": "off",
+				"noControlCharactersInRegex": "off",
+				"noExplicitAny": "off"
+			}
+		},
+		"ignore": [
+			"tests/**/*",
+			"crates/**/*",
+			"packages/rspack-test-tools/template",
+			"packages/rspack-test-tools/src/helper/legacy/**/*",
+			"packages/rspack/module.d.ts",
+			// --- ignore runtime code in browser
+			"packages/rspack/hot",
+			"packages/rspack-dev-server/client",
+			"packages/rspack/src/container/default.runtime.js"
+		]
+	},
+	"vcs": {
+		"enabled": true,
+		"defaultBranch": "main",
+		"clientKind": "git",
+		"useIgnoreFile": true
+	}
+}
