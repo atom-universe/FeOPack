@@ -12,9 +12,11 @@
   "files": [
     "dist"
   ],
-
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.26.0"
+  "packageManager": "pnpm@10.26.0",
+  "devDependencies": {
+    "@types/node": "^25.0.3"
+  }
 }
