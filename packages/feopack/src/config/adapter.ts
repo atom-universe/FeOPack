@@ -7,6 +7,7 @@ export const getRawOptions = (options: FeopackOptions) => {
   return {
     context: options.context,
     entry: options.entry,
+    mode: options.mode || 'production',
     output: options.output,
   }
 }

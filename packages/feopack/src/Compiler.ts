@@ -32,8 +32,9 @@ export class Compiler {
   #build(): Compilation {
     const inner = this.#getInner()
     // 让 rust 来执行
-    const rustCompilation = inner.build('test')
-    return new Compilation(this, rustCompilation)
+    inner.build('test')
+    // TODO:暂时创建一个空的 compilation 对象，等 Rust 侧返回 Compilation 后再修改
+    return new Compilation(this, { hash: null })
   }
 
   compile(): Compilation {

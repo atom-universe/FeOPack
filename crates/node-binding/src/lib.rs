@@ -32,7 +32,7 @@ impl Rspack {
 
   #[napi]
   pub fn build(&self, test_string: String) -> Result<()> {
-    println!("test_string: {}", test_string);
+    println!("[Rust]: test_string: {}", test_string);
     Ok(())
   }
 }

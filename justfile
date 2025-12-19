@@ -13,7 +13,11 @@ build-crates:
     cargo build --workspace --release
     napi build --platform --release --package node-binding
 
+build-cli:
+    cd packages/feopack-cli && pnpm build
+
 # Build everything and update dependencies
 build-update:
     just build-crates
+    just build-cli
     pnpm i

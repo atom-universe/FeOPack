@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.8",
   "scripts": {
+    "build:chunk-basic": "feopack -c cases/chunk/basic/rspack.config.js",
     "test": "playwright test",
     "test:CI": "CI=1 npm run test"
   },

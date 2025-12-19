@@ -39,10 +39,10 @@
     "access": "public"
   },
   "scripts": {
-    "artifacts": "napi artifacts",
-    "bench": "node --import @oxc-node/core/register benchmark/bench.ts",
     "build:crates": "just build-crates",
     "build:update": "just build-update",
+    "artifacts": "napi artifacts",
+    "bench": "node --import @oxc-node/core/register benchmark/bench.ts",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
@@ -55,6 +55,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "@feopack/cli": "workspace:*",
     "@emnapi/core": "^1.5.0",
     "@emnapi/runtime": "^1.5.0",
     "@napi-rs/cli": "^3.2.0",

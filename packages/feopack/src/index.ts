@@ -3,6 +3,7 @@ import { Compiler } from './Compiler'
 export interface FeopackOptions {
   context: string
   entry: string | string[] | Record<string, string | string[]>
+  mode?: 'development' | 'production'
   output: {
     path: string
     filename: string
