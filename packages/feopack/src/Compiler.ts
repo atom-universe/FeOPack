@@ -1,9 +1,9 @@
 import { FeopackOptions } from '.'
+import * as binding from '@feopack/binding'
 import { getRawOptions } from './config/adapter'
 import { Compilation } from './Complication'
-
 export class Compiler {
-  #inner: any // Rust 那一侧对应的 Compiler
+  #inner?: binding.Rspack // Rust 那一侧对应的 Compiler
   // 打包的根路径
   options: FeopackOptions
   context: string
@@ -13,7 +13,7 @@ export class Compiler {
     this.options = options
   }
 
-  #getInner(): any {
+  #getInner(): binding.Rspack {
     if (this.#inner) {
       return this.#inner
     }
@@ -25,13 +25,14 @@ export class Compiler {
       // ThreadsafeWritableNodeFS.__to_binding(this.outputFileSystem!),
       // ResolverFactory.__to_binding(this.resolverFactory),
     )
-    return this.#inner
+
+    return this.#inner!
   }
 
   #build(): Compilation {
     const inner = this.#getInner()
     // 让 rust 来执行
-    const rustCompilation = inner.build()
+    const rustCompilation = inner.build('test')
     return new Compilation(this, rustCompilation)
   }
 

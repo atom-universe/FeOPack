@@ -16,6 +16,9 @@
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.26.0",
+  "dependencies": {
+    "@feopack/binding": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^25.0.3"
   }

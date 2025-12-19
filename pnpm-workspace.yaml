@@ -4,7 +4,7 @@ packages:
   # - "packages/playground/fixtures/**"
   # - "packages/create-rspack/**"
   # - "npm/*"
-  - "crates/node_binding"
+  - "crates/node-binding"
   # - "crates/rspack_fs_node"
   # - "examples/**"
   # - "!examples/three"

@@ -1,0 +1,9 @@
+[package]
+authors = ["LongYinan <lynweklm@gmail.com>"]
+edition = "2021"
+name    = "feopack-core"
+version = "0.1.0"
+
+[dependencies]
+napi        = "3.0.0"
+napi-derive = "3.0.0"
