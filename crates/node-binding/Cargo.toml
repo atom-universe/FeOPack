@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 feopack-binding = { path = "../feopack-binding" }
 feopack-core    = { path = "../feopack-core" }
-napi            = "3.0.0"
+napi            = { version = "3.0.0", features = ["tokio_rt"] }
 napi-derive     = "3.0.0"
 
 [build-dependencies]

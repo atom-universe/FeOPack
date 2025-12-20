@@ -5,6 +5,7 @@ export interface Output {
   filename: string
 }
 
+/** 直接映射前端的打包配置文件  */
 export interface RawOptions {
   mode: string
   context: string
@@ -12,5 +13,5 @@ export interface RawOptions {
 }
 export declare class Rspack {
   constructor(options: RawOptions)
-  build(testString: string): void
+  build(): Promise<void>
 }
