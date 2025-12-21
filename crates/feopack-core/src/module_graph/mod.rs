@@ -1,5 +1,5 @@
 pub mod module;
-use module::*;
+pub use module::Module;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -10,7 +10,7 @@ pub struct ModuleGraphPartial {
 #[derive(Debug, Default)]
 pub struct ModuleGraph {
   // 已构建好的内容，只读
-  partials: Vec<ModuleGraphPartial>,
+  pub(crate) partials: Vec<ModuleGraphPartial>,
   // 增量构建可编辑的部分，可写
   // active: Option<ModuleGraphPartial>,
 }
@@ -22,6 +22,20 @@ impl ModuleGraph {
 
   pub fn add_module(&mut self, partial: ModuleGraphPartial) {
     self.partials.push(partial);
+  }
+
+  pub fn add_single_module(&mut self, module_id: String, module: Module) {
+    // 查找最后一个 partial，如果为空则创建新的
+    if self.partials.is_empty() {
+      self.partials.push(ModuleGraphPartial {
+        modules: std::collections::HashMap::new(),
+      });
+    }
+    
+    // 添加到最后一个 partial
+    if let Some(last) = self.partials.last_mut() {
+      last.modules.insert(module_id, module);
+    }
   }
 
   pub fn has_module(&self, id: &str) -> bool {

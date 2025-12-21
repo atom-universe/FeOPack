@@ -28,7 +28,6 @@ impl Compiler {
   pub async fn compile(&mut self) -> Result<(), String> {
     self.compilation.make().await?;
     self.compilation.seal();
-    self.compilation.finish();
     Ok(())
   }
 }

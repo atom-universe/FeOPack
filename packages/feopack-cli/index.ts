@@ -36,7 +36,7 @@ try {
   const compilation = compiler.run()
 
   console.log('Build completed!')
-  console.log('Compilation hash:', compilation.hash || 'N/A')
+  console.log('Compilation', compilation)
 } catch (error) {
   console.error('Build failed:', error)
   process.exit(1)
