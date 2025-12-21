@@ -1,5 +1,3 @@
-import("./app").then(m => {
-  m.title("Hello FeOPack");
-});
+import title from "./app.js";
 
-
+title("Hello FeOPack");

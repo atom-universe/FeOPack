@@ -1,7 +1,8 @@
 use crate::module_graph::{Module, ModuleGraph};
 use crate::swc_compiler::SwcCompiler;
-use std::path::Path;
-use swc_ecma_ast::Program;
+use std::collections::{HashSet, VecDeque};
+use std::path::{Path, PathBuf};
+use swc_ecma_ast::{ModuleDecl, ModuleItem, Program};
 use tokio::fs::read_to_string;
 
 #[derive(Debug, Clone)]
@@ -47,58 +48,84 @@ impl Compilation {
     }
   }
 
-  // 产生 module graph (module + deps)
-  pub async fn make(&mut self) -> Result<(), String> {
-    /*
-     * 这里 rspack 实际情况是把数据结构转为 EntryDependency, 然后通过 ModuleFactory 创建 Module
-     * 另外还会开一个 Task Loop 做并行调度
-     */
-    let entry = self.options.entry.clone();
-    let context = Path::new(&self.options.context);
-    // PathBuf 类型可以跨平台
-    let entry_path = context.join(&entry);
+  // 解析依赖路径，主要是处理 `/basic/./app.js` 这种带相对路径的情况
+  fn resolve_dep_path(dep: &str, module_dir: &Path, context: &Path) -> Result<PathBuf, String> {
+    // 如果依赖路径以 . 或 .. 开头，
+    // Rust 的 Path::join 会自动处理 . 和 .. 的规范化
+    let mut dep_path = if dep.starts_with('.') {
+      module_dir.join(dep)
+    } else {
+      // 对于非相对路径（如 npm 包），使用 context
+      context.join(dep)
+    };
 
-    println!("\n[rust make 阶段] 读取文件: {:?}", entry_path);
-
-    // 使用 tokio::fs::read_to_string，因为是 async 函数
-    let source = read_to_string(&entry_path)
-      .await
-      .map_err(|e| format!("读取文件失败 {:?}: {}", entry_path, e))?;
-
-    println!("文件内容长度: {} 字节", source.len());
-
-    let compiler = SwcCompiler::new();
-    let ast = compiler.parse_js(entry_path.clone(), source)?;
-
-    // 收集依赖并创建 Module
-    let module_id = entry_path.to_string_lossy().to_string();
-    let mut dependencies = Vec::new();
-
-    match &ast {
-      Program::Module(module) => {
-        println!("\n解析到 {} 个语句/声明", module.body.len());
-
-        // 收集所有 import 依赖
-        for item in &module.body {
-          use swc_ecma_ast::{ModuleDecl, ModuleItem};
-          if let ModuleItem::ModuleDecl(ModuleDecl::Import(import)) = item {
-            // Wtf8Atom 通过 as_str() 获取 &str
-            if let Some(dep) = import.src.value.as_str() {
-              let dep = dep.to_string();
-              println!("  发现 import: {}", dep);
-              dependencies.push(dep);
-            }
-          }
-        }
-      }
-      Program::Script(_) => {
-        return Err("不支持 Script 模式，只支持 Module 模式".to_string());
+    // 检查文件是否存在，如果不存在且没有扩展名，尝试添加 .js
+    if !dep_path.exists() && dep_path.extension().is_none() {
+      let dep_path_with_js = dep_path.with_extension("js");
+      if dep_path_with_js.exists() {
+        dep_path = dep_path_with_js;
       }
     }
 
-    // 创建 Module 并添加到 module graph
-    let module = Module::new(module_id.clone(), Some(dependencies));
-    self.module_graph.add_single_module(module_id, module);
+    Ok(dep_path)
+  }
+
+  // 产生 module graph (module + deps)
+  /*
+   * 这里 rspack 实际情况是把数据结构转为 EntryDependency, 然后通过 ModuleFactory 创建 Module
+   * 另外还会开一个 Task Loop 做并行调度, 这里就用 BFS 大致模拟
+   */
+  pub async fn make(&mut self) -> Result<(), String> {
+    let context = Path::new(&self.options.context);
+    let entry_path = context.join(&self.options.entry);
+
+    let mut queue = VecDeque::new();
+    let mut visited = HashSet::new();
+
+    queue.push_back(entry_path);
+
+    while let Some(module_path) = queue.pop_front() {
+      if visited.contains(&module_path) {
+        continue;
+      }
+      visited.insert(module_path.clone());
+
+      let source = read_to_string(&module_path)
+        .await
+        .map_err(|e| format!("读取文件失败 {:?}: {}", module_path, e))?;
+
+      let compiler = SwcCompiler::new();
+      let ast = compiler.parse_js(module_path.clone(), source)?;
+
+      let mut dependencies = Vec::new();
+
+      if let Program::Module(module) = ast {
+        // 获取当前模块的父目录，用于解析相对路径
+        let module_dir = module_path
+          .parent()
+          .ok_or_else(|| format!("无法获取模块目录: {:?}", module_path))?;
+
+        for item in module.body {
+          if let ModuleItem::ModuleDecl(ModuleDecl::Import(import)) = item {
+            if let Some(dep) = import.src.value.as_str() {
+              let dep = dep.to_string();
+
+              let dep_path = Self::resolve_dep_path(&dep, module_dir, context)?;
+
+              dependencies.push(dep.clone());
+              queue.push_back(dep_path);
+            }
+          }
+        }
+      } else {
+        return Err("不支持 Script 模式".into());
+      }
+
+      let module_id = module_path.to_string_lossy().to_string();
+      let module = Module::new(module_id.clone(), Some(dependencies));
+
+      self.module_graph.add_single_module(module_id, module);
+    }
 
     Ok(())
   }
@@ -109,7 +136,7 @@ impl Compilation {
   // }
 
   // module graph -> chunk graph
-  pub fn seal(&mut self) {
+  pub async fn seal(&mut self) -> Result<(), String> {
     println!("\n[rust seal 阶段] module graph -> chunk graph");
 
     // 收集所有模块 ID
@@ -132,5 +159,6 @@ impl Compilation {
     };
 
     self.chunk_graph.chunks.push(chunk);
+    Ok(())
   }
 }
