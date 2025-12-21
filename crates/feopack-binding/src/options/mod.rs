@@ -12,6 +12,7 @@ pub struct Output {
 #[napi(object, object_to_js = false)]
 pub struct RawOptions {
   // 前端保证数据一定存在
+  pub entry: String,
   pub mode: String,
   pub context: String,
   pub output: Output,

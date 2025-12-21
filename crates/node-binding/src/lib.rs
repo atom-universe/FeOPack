@@ -4,7 +4,7 @@ use feopack_binding::options::RawOptions;
 use napi::{Error, Result};
 use napi_derive::napi;
 
-use feopack_core::{Compiler, CompilationOptions, Output};
+use feopack_core::*;
 
 #[napi]
 pub struct Rspack {
@@ -18,13 +18,14 @@ impl Rspack {
     // 从 RawOptions 转换为 CompilationOptions
     let compilation_options = CompilationOptions {
       mode: options.mode,
+      entry: options.entry,
       context: options.context,
       output: Output {
         path: options.output.path,
         filename: options.output.filename,
       },
     };
-    
+
     let compiler = Compiler::new(compilation_options);
     Ok(Self {
       compiler: Box::new(compiler),

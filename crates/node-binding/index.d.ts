@@ -7,6 +7,7 @@ export interface Output {
 
 /** 直接映射前端的打包配置文件  */
 export interface RawOptions {
+  entry: string
   mode: string
   context: string
   output: Output

@@ -7,6 +7,7 @@ export class Compiler {
   // 打包的根路径
   options: FeopackOptions
   context: string
+  compilation?: Compilation
 
   constructor(options: FeopackOptions) {
     this.context = options.context
@@ -18,6 +19,7 @@ export class Compiler {
       return this.#inner
     }
     const rawOptions = getRawOptions(this.options)
+    // 拿到 rust 那一侧的 compiler 实例
     const instanceBinding = require('@feopack/binding')
 
     this.#inner = new instanceBinding.Rspack(
@@ -29,19 +31,19 @@ export class Compiler {
     return this.#inner!
   }
 
-  #build(): Compilation {
+  #build() {
+    // rust, 启动！
     const inner = this.#getInner()
-    // 让 rust 来执行
-    inner.build('test')
-    // TODO:暂时创建一个空的 compilation 对象，等 Rust 侧返回 Compilation 后再修改
-    return new Compilation(this, { hash: null })
+    inner.build()
+    // TODO: 目前没有插件的部分，所以暂时用不到 nodejs 的 compilation
+    // this.compilation = new Compilation(this, inner)
   }
 
-  compile(): Compilation {
-    return this.#build()
+  compile() {
+    this.#build()
   }
 
-  run(): Compilation {
-    return this.compile()
+  run() {
+    this.compile()
   }
 }

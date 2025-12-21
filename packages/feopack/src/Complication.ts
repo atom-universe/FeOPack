@@ -1,33 +1,32 @@
-// Mini Compilation - 最简版
 import type { Compiler } from './Compiler'
 import { Stats } from './Stats'
-
+import * as binding from '@feopack/binding'
 export class Compilation {
   // 再 rust 那一侧的 compilation 实例
   name?: string
-  #inner: any
+  #inner: binding.Rspack
   compiler: Compiler
   // options: FeopackOptions
   // outputOptions: OutputNormalized
   // startTime?: number
   // endTime?: number
 
-  constructor(compiler: Compiler, inner: any) {
+  constructor(compiler: Compiler, inner: binding.Rspack) {
     this.#inner = inner
     this.compiler = compiler
     // this.options = compiler.options
     // this.outputOptions = compiler.options.output
   }
 
-  get hash(): string | null {
-    return this.#inner.hash
-  }
+  // get hash(): string | null {
+  //   return this.#inner.hash
+  // }
 
   getStats(): Stats {
     return new Stats(this)
   }
 
-  __internal_getInner(): any {
+  __internal_getInner(): binding.Rspack {
     return this.#inner
   }
 }

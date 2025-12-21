@@ -20,6 +20,15 @@ impl Compiler {
   pub async fn build(&mut self) -> Result<(), String> {
     let compilation = Compilation::new(self.options.clone());
     fast_set(&mut self.compilation, compilation);
+    self.compile().await?;
+    // TODO: compile_done()
+    Ok(())
+  }
+
+  pub async fn compile(&mut self) -> Result<(), String> {
+    self.compilation.make().await?;
+    self.compilation.seal();
+    self.compilation.finish();
     Ok(())
   }
 }
