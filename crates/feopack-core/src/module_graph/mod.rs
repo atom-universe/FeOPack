@@ -26,7 +26,7 @@ impl ModuleGraph {
 
   pub fn has_module(&self, id: &str) -> bool {
     for partial in &self.partials {
-      if let Some(module) = partial.modules.get(id) {
+      if partial.modules.contains_key(id) {
         return true;
       }
     }
