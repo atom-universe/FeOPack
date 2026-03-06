@@ -43,6 +43,7 @@
     "access": "public"
   },
   "scripts": {
+    "build": "napi build --platform --release",
     "build:crates": "just build-crates",
     "build:update": "just build-update",
     "artifacts": "napi artifacts",
