@@ -36,7 +36,7 @@ jobs:
         with:
           components: clippy, rustfmt
       - name: Install dependencies
-        run: yarn install
+        run: yarn install --no-immutable
       - name: Oxlint
         run: yarn lint
       - name: Cargo fmt
@@ -101,7 +101,7 @@ jobs:
         if: ${{ matrix.settings.setup }}
         shell: bash
       - name: Install dependencies
-        run: yarn install
+        run: yarn install --no-immutable
       - name: Build
         run: ${{ matrix.settings.build }}
         shell: bash
@@ -143,7 +143,7 @@ jobs:
           cache: yarn
           architecture: ${{ matrix.settings.architecture }}
       - name: Install dependencies
-        run: yarn install
+        run: yarn install --no-immutable
       - name: Download artifacts
         uses: actions/download-artifact@v7
         with:
@@ -237,7 +237,7 @@ jobs:
           node-version: 24
           cache: yarn
       - name: Install dependencies
-        run: yarn install
+        run: yarn install --no-immutable
       - name: create npm dirs
         run: yarn napi create-npm-dirs
       - name: Download all artifacts
