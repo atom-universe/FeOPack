@@ -8,7 +8,7 @@ use feopack_core::*;
 
 #[napi]
 pub fn plus100(num: i32) -> i32 {
-    num + 100
+  num + 100
 }
 
 #[napi]
