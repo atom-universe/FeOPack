@@ -52,7 +52,8 @@
     "test": "ava",
     "preversion": "napi build --platform && git add .",
     "version": "napi version",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build": "napi build --platform --release"
   },
   "devDependencies": {
     "@feopack/cli": "workspace:*",
