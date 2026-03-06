@@ -7,6 +7,11 @@ use napi_derive::napi;
 use feopack_core::*;
 
 #[napi]
+pub fn plus100(num: i32) -> i32 {
+    num + 100
+}
+
+#[napi]
 pub struct Rspack {
   compiler: Box<Compiler>,
 }
@@ -32,6 +37,9 @@ impl Rspack {
     })
   }
 
+  /// # Safety
+  /// This function is unsafe because it interacts with native resources.
+  /// Ensure the compiler is properly initialized before calling.
   #[napi]
   pub async unsafe fn build(&mut self) -> Result<()> {
     self
