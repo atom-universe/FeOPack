@@ -31,7 +31,7 @@ impl ModuleGraph {
         modules: std::collections::HashMap::new(),
       });
     }
-    
+
     // 添加到最后一个 partial
     if let Some(last) = self.partials.last_mut() {
       last.modules.insert(module_id, module);
