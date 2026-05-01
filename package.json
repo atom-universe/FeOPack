@@ -41,6 +41,7 @@
   "scripts": {
     "build:crates": "just build-crates",
     "build:update": "just build-update",
+    "build": "npm run build:crates",
     "artifacts": "napi artifacts",
     "bench": "node --import @oxc-node/core/register benchmark/bench.ts",
     "format": "run-p format:prettier format:rs format:toml",

@@ -8,8 +8,6 @@
 
 </div>
 
-
-
 ## 📖 关于
 
 ✨ 本项目为学习 Rspack 的核心功能实现原理以及项目工程架构而编写。
@@ -25,17 +23,19 @@
 ### 安装依赖
 
 ```bash
-pnpmi 
+pnpm i 
 ```
 
 ### 构建项目
 
-```bash
-# 推荐方式（使用 @napi-rs/cli）
-npm run build
+这里用 just 作为命令管理器封装了脚本，最终直接用 pkg script 即可使用：
 
-# 或手动构建
-npm run build:napi && npm run build:ts
+```bash
+# 全量构建
+pnpm run build
+
+# 跳过 js 层，只构建 rust 部分
+pnpm run build:update
 ```
 
 ### 使用
@@ -54,16 +54,6 @@ console.log(compile('src/index.ts'));
 ```bash
 # 监听模式，自动重新构建
 npm run dev
-```
-
-### 手动构建（不使用 @napi-rs/cli）
-
-```bash
-# 构建原生模块
-cargo build -p feopack-node
-
-# 构建 TypeScript
-npm run build:ts
 ```
 
 ## 📝 说明
