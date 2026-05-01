@@ -47,13 +47,34 @@ console.log(version());
 console.log(compile('src/index.ts'));
 ```
 
-## 🛠️ 开发
+## 🛠️ 如何开发
 
-### 开发模式
+### 核心源码位置
+
+> 现在 agent 时代了应该也没人会看这玩意儿
+> 不过仔细想想其实 agent 时代之前也没人看我代码，所以好像也无所谓了
+
+feopack 的核心代码有两个部分，分别是 ts 外壳和 rust 内核
+
+其中 ts 外壳的入口是 `packages/feopack/index.ts` 
+而 rust 内核的入口是 `crates/feopack/lib.rs`
+
+二者通过 `napi-rs` 提供的 binding 层通信实现 FFI
+
+### 代码调试流程
+
+> 原本是放到 `__test__`, 但是懒得自己写测试样例，
+> 所以还是改造了一下，使用 rspack 那复制过来的测试用例
+> 它们放在 `packages/playground/cases`
+
+可以这样验证测试用例：
 
 ```bash
-# 监听模式，自动重新构建
-npm run dev
+# 测试所有用例（暂时不推荐使用，有的案例还没改造适配
+pnpm test
+
+# 指定使用特定的用例（也就是 rspack.config.js 所在的目录名
+pnpm test basic 
 ```
 
 ## 📝 说明
