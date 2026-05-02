@@ -50,7 +50,6 @@ impl Compiler {
     self.compilation.make().await?;
     self.compilation.seal().await?;
     self.emit_assets().await?;
-
     Ok(())
   }
 }

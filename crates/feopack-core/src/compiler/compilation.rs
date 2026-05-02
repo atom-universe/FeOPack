@@ -125,7 +125,10 @@ impl Compilation {
 
   // module graph -> chunk graph
   pub async fn seal(&mut self) -> Result<(), String> {
-    println!("\n[rust seal 阶段] module graph -> chunk graph");
+    println!(
+      "\n[rust seal 阶段] module graph -> chunk graph: {:?}",
+      self.module_graph.partials
+    );
     self.create_chunk_graph().await;
     // 给每一个 module 生成代码
     self.code_generation().await?;
@@ -175,21 +178,23 @@ impl Compilation {
         let source = read_to_string(module_id)
           .await
           .map_err(|e| format!("读取模块文件失败 {:?}: {}", module_id, e))?;
+        println!("模块源代码: {:?}", source);
 
+        todo!("code generation");
         //  "module_id": function(module, exports, require) { source }
-        modules_code.push_str(&format!(
-          r#""{}": function(module, exports, require) {{
-  {}
-  }},"#,
-          module_id,
-          // 缩进
-          source
-            .lines()
-            .map(|line| format!("  {}", line))
-            .collect::<Vec<_>>()
-            .join("\n")
-        ));
-        modules_code.push('\n');
+        //       modules_code.push_str(&format!(
+        //         r#""{}": function(module, exports, require) {{
+        // {}
+        // }},"#,
+        //         module_id,
+        //         // 缩进
+        //         source
+        //           .lines()
+        //           .map(|line| format!("  {}", line))
+        //           .collect::<Vec<_>>()
+        //           .join("\n")
+        //       ));
+        //       modules_code.push('\n');
       }
       let bundle = format!(
         r#"(function(modules) {{
