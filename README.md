@@ -73,8 +73,8 @@ feopack 的核心代码有两个部分，分别是 ts 外壳和 rust 内核
 # 测试所有用例（暂时不推荐使用，有的案例还没改造适配
 pnpm test
 
-# 指定使用特定的用例（也就是 rspack.config.js 所在的目录名
-pnpm test basic 
+# 指定使用特定的用例（也就是相对 packages/playground/cases 的路径
+pnpm test chunk/basic
 ```
 
 产物会出现在各个 case 目录下的 dist（如未配置输出目录）中，当前阶段只支持人工观察验证

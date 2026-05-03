@@ -14,6 +14,34 @@ function walk(root, callback) {
   }
 }
 
+function normalizeConfig(config, parent) {
+  return {
+    ...config,
+    context: config.context || parent,
+    output: {
+      path: path.join(parent, 'dist'),
+      filename: 'main.js',
+      ...config.output,
+    },
+  };
+}
+
+function executeDist(config) {
+  const outputPath = config.output.path || path.join(config.context, 'dist');
+  const filename = config.output.filename || 'main.js';
+  const bundlePath = path.join(outputPath, filename);
+
+  if (!fs.existsSync(bundlePath)) {
+    throw new Error(`Dist file not found: ${bundlePath}`);
+  }
+
+  delete require.cache[require.resolve(bundlePath)];
+  console.log();
+  console.log('='.repeat(10), ' 产物运行结果 ', '='.repeat(10));
+  require(bundlePath);
+  console.log('='.repeat(35), '\n');
+}
+
 const CONFIG_FILENAME = 'rspack.config.js';
 
 function run(filter = []) {
@@ -25,10 +53,13 @@ function run(filter = []) {
     if (dirent.name === CONFIG_FILENAME) {
       // console.log('fullPath', fullPath);
       const parent = path.dirname(fullPath);
+      const casePath = path.relative(rootPath, parent);
 
-      if (!filter.length || filter.some(f => parent.endsWith(f))) {
-        const config = require(fullPath);
+      if (!filter.length || filter.includes(casePath)) {
+        delete require.cache[require.resolve(fullPath)];
+        const config = normalizeConfig(require(fullPath), parent);
         feopack(config).run();
+        executeDist(config);
       }
     }
   });
