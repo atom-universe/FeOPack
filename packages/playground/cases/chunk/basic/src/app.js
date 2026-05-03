@@ -5,3 +5,8 @@ export default function title(t) {
   }
 }
 
+export let num = 0;
+
+export const plusNum = () => {
+  num++;
+};

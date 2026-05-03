@@ -1,18 +1,28 @@
+use std::collections::HashMap;
+
 use swc_common::{sync::Lrc, FileName, SourceMap, DUMMY_SP};
 use swc_ecma_ast::{EsVersion, ModuleDecl, ModuleItem, Program};
 use swc_ecma_codegen::{text_writer::JsWriter, Config, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
+use swc_ecma_visit::{VisitMut, VisitMutWith};
 
 #[derive(Debug, Clone)]
 pub struct RawImportRecord {
   pub local: String,
+  pub imported: String,
   pub request: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct ResolvedImportRecord {
+  // import a from 'xx/xxx',
+  // local 就是其中的中的 a
   pub local: String,
+  // export 的方式，主要是区分是否为 default
+  pub imported: String,
+  // 其中的 './xx/xxx'
   pub request: String,
+  // request 字段对应的完整路径 'User/阿巴巴/xx/xxx'
   pub module_id: String,
 }
 
@@ -79,11 +89,28 @@ impl SwcCompiler {
           .to_string();
 
         for specifier in &import_decl.specifiers {
-          if let swc_ecma_ast::ImportSpecifier::Default(default_specifier) = specifier {
-            imports.push(RawImportRecord {
-              local: default_specifier.local.sym.to_string(),
-              request: request.clone(),
-            });
+          match specifier {
+            swc_ecma_ast::ImportSpecifier::Default(default_specifier) => {
+              imports.push(RawImportRecord {
+                local: default_specifier.local.sym.to_string(),
+                imported: "default".to_string(),
+                request: request.clone(),
+              });
+            }
+            swc_ecma_ast::ImportSpecifier::Named(named_specifier) => {
+              let imported = named_specifier
+                .imported
+                .as_ref()
+                .map(|imported| imported.atom().to_string())
+                .unwrap_or_else(|| named_specifier.local.sym.to_string());
+
+              imports.push(RawImportRecord {
+                local: named_specifier.local.sym.to_string(),
+                imported,
+                request: request.clone(),
+              });
+            }
+            _ => {}
           }
         }
       }
@@ -106,6 +133,8 @@ impl SwcCompiler {
     };
 
     let mut body = Vec::new();
+    let mut import_bindings = HashMap::new();
+    let mut import_index = 0usize;
 
     for item in module.body {
       match item {
@@ -117,51 +146,39 @@ impl SwcCompiler {
             .ok_or_else(|| "import 路径不是合法 utf8".to_string())?
             .to_string();
 
+          let import_record = imports
+            .iter()
+            .find(|import| import.request == request)
+            .ok_or_else(|| format!("找不到 import 记录: {}", request))?;
+          let namespace = format!("__feopack_import_{}__", import_index);
+          import_index += 1;
+
+          body.push(Self::create_import_namespace_decl(
+            &namespace,
+            &import_record.module_id,
+          ));
+
           for specifier in import_decl.specifiers {
-            if let ImportSpecifier::Default(default_specifier) = specifier {
-              let import_record = imports
-                .iter()
-                .find(|import| {
-                  import.request == request && default_specifier.local.sym == import.local
-                })
-                .ok_or_else(|| format!("找不到 import 记录: {}", request))?;
+            match specifier {
+              ImportSpecifier::Default(default_specifier) => {
+                import_bindings.insert(
+                  default_specifier.local.sym.to_string(),
+                  (namespace.clone(), "default".to_string()),
+                );
+              }
+              ImportSpecifier::Named(named_specifier) => {
+                let imported = named_specifier
+                  .imported
+                  .as_ref()
+                  .map(|imported| imported.atom().to_string())
+                  .unwrap_or_else(|| named_specifier.local.sym.to_string());
 
-              let import_call = Expr::Call(CallExpr {
-                span: DUMMY_SP,
-                ctxt: Default::default(),
-                callee: Callee::Expr(Box::new(Expr::Ident(Ident::new_no_ctxt(
-                  "__feopack_import__".into(),
-                  DUMMY_SP,
-                )))),
-                args: vec![ExprOrSpread {
-                  spread: None,
-                  expr: Box::new(Expr::Lit(Lit::Str(Str {
-                    span: DUMMY_SP,
-                    value: import_record.module_id.clone().into(),
-                    raw: None,
-                  }))),
-                }],
-                type_args: None,
-              });
-
-              let default_member = Expr::Member(MemberExpr {
-                span: DUMMY_SP,
-                obj: Box::new(import_call),
-                prop: MemberProp::Ident(IdentName::from("default")),
-              });
-
-              body.push(ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
-                span: DUMMY_SP,
-                ctxt: Default::default(),
-                kind: VarDeclKind::Const,
-                declare: false,
-                decls: vec![VarDeclarator {
-                  span: DUMMY_SP,
-                  name: Pat::Ident(default_specifier.local.into()),
-                  init: Some(Box::new(default_member)),
-                  definite: false,
-                }],
-              })))));
+                import_bindings.insert(
+                  named_specifier.local.sym.to_string(),
+                  (namespace.clone(), imported),
+                );
+              }
+              _ => return Err("暂不支持 namespace import".into()),
             }
           }
         }
@@ -178,57 +195,55 @@ impl SwcCompiler {
                 declare: false,
                 function: fn_expr.function,
               }))));
-
-              body.push(ModuleItem::Stmt(Stmt::Expr(ExprStmt {
-                span: DUMMY_SP,
-                expr: Box::new(Expr::Call(CallExpr {
-                  span: DUMMY_SP,
-                  ctxt: Default::default(),
-                  callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
-                    span: DUMMY_SP,
-                    obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
-                      "__feopack_import__".into(),
-                      DUMMY_SP,
-                    ))),
-                    prop: MemberProp::Ident(IdentName::from("d")),
-                  }))),
-                  args: vec![
-                    ExprOrSpread {
-                      spread: None,
-                      expr: Box::new(Expr::Member(MemberExpr {
-                        span: DUMMY_SP,
-                        obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
-                          "__feopack_module__".into(),
-                          DUMMY_SP,
-                        ))),
-                        prop: MemberProp::Ident(IdentName::from("exports")),
-                      })),
-                    },
-                    ExprOrSpread {
-                      spread: None,
-                      expr: Box::new(Expr::Object(ObjectLit {
-                        span: DUMMY_SP,
-                        props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                          key: PropName::Ident(IdentName::from("default")),
-                          value: Box::new(Expr::Arrow(ArrowExpr {
-                            span: DUMMY_SP,
-                            ctxt: Default::default(),
-                            params: vec![],
-                            body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Ident(ident)))),
-                            is_async: false,
-                            is_generator: false,
-                            type_params: None,
-                            return_type: None,
-                          })),
-                        })))],
-                      })),
-                    },
-                  ],
-                  type_args: None,
-                })),
-              })));
+              body.push(Self::create_define_exports_stmt(vec![(
+                "default".to_string(),
+                ident.sym.to_string(),
+              )]));
             }
             _ => return Err("暂只支持 export default function".into()),
+          }
+        }
+
+        ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(export_decl)) => match export_decl.decl {
+          Decl::Var(var_decl) => {
+            let exports = Self::collect_var_decl_exports(&var_decl)?;
+            body.push(ModuleItem::Stmt(Stmt::Decl(Decl::Var(var_decl))));
+            body.push(Self::create_define_exports_stmt(exports));
+          }
+          Decl::Fn(fn_decl) => {
+            let export_name = fn_decl.ident.sym.to_string();
+            body.push(ModuleItem::Stmt(Stmt::Decl(Decl::Fn(fn_decl))));
+            body.push(Self::create_define_exports_stmt(vec![(
+              export_name.clone(),
+              export_name,
+            )]));
+          }
+          _ => return Err("暂只支持 export var/function".into()),
+        },
+
+        ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(named_export)) => {
+          if named_export.src.is_some() {
+            return Err("暂不支持 re-export from".into());
+          }
+
+          let mut exports = Vec::new();
+          for specifier in named_export.specifiers {
+            match specifier {
+              ExportSpecifier::Named(named_specifier) => {
+                let local = named_specifier.orig.atom().to_string();
+                let exported = named_specifier
+                  .exported
+                  .as_ref()
+                  .map(|exported| exported.atom().to_string())
+                  .unwrap_or_else(|| local.clone());
+                exports.push((exported, local));
+              }
+              _ => return Err("暂不支持当前 export specifier".into()),
+            }
+          }
+
+          if !exports.is_empty() {
+            body.push(Self::create_define_exports_stmt(exports));
           }
         }
 
@@ -236,10 +251,131 @@ impl SwcCompiler {
       }
     }
 
-    Ok(Program::Module(Module {
+    let mut transformed_module = Module {
       span: module.span,
       body,
       shebang: module.shebang,
+    };
+
+    transformed_module.visit_mut_with(&mut ImportedBindingRewriter {
+      bindings: import_bindings,
+    });
+
+    Ok(Program::Module(transformed_module))
+  }
+
+  fn create_import_namespace_decl(namespace: &str, module_id: &str) -> ModuleItem {
+    use swc_ecma_ast::*;
+
+    ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+      span: DUMMY_SP,
+      ctxt: Default::default(),
+      kind: VarDeclKind::Const,
+      declare: false,
+      decls: vec![VarDeclarator {
+        span: DUMMY_SP,
+        name: Pat::Ident(BindingIdent::from(Ident::new_no_ctxt(
+          namespace.into(),
+          DUMMY_SP,
+        ))),
+        init: Some(Box::new(Expr::Call(CallExpr {
+          span: DUMMY_SP,
+          ctxt: Default::default(),
+          callee: Callee::Expr(Box::new(Expr::Ident(Ident::new_no_ctxt(
+            "__feopack_import__".into(),
+            DUMMY_SP,
+          )))),
+          args: vec![ExprOrSpread {
+            spread: None,
+            expr: Box::new(Expr::Lit(Lit::Str(Str {
+              span: DUMMY_SP,
+              value: module_id.into(),
+              raw: None,
+            }))),
+          }],
+          type_args: None,
+        }))),
+        definite: false,
+      }],
+    }))))
+  }
+
+  fn collect_var_decl_exports(
+    var_decl: &swc_ecma_ast::VarDecl,
+  ) -> Result<Vec<(String, String)>, String> {
+    use swc_ecma_ast::*;
+
+    let mut exports = Vec::new();
+    for declarator in &var_decl.decls {
+      match &declarator.name {
+        Pat::Ident(binding_ident) => {
+          let name = binding_ident.id.sym.to_string();
+          exports.push((name.clone(), name));
+        }
+        _ => return Err("暂不支持解构 export var".into()),
+      }
+    }
+
+    Ok(exports)
+  }
+
+  fn create_define_exports_stmt(exports: Vec<(String, String)>) -> ModuleItem {
+    use swc_ecma_ast::*;
+
+    ModuleItem::Stmt(Stmt::Expr(ExprStmt {
+      span: DUMMY_SP,
+      expr: Box::new(Expr::Call(CallExpr {
+        span: DUMMY_SP,
+        ctxt: Default::default(),
+        callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
+          span: DUMMY_SP,
+          obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
+            "__feopack_import__".into(),
+            DUMMY_SP,
+          ))),
+          prop: MemberProp::Ident(IdentName::from("d")),
+        }))),
+        args: vec![
+          ExprOrSpread {
+            spread: None,
+            expr: Box::new(Expr::Member(MemberExpr {
+              span: DUMMY_SP,
+              obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
+                "__feopack_module__".into(),
+                DUMMY_SP,
+              ))),
+              prop: MemberProp::Ident(IdentName::from("exports")),
+            })),
+          },
+          ExprOrSpread {
+            spread: None,
+            expr: Box::new(Expr::Object(ObjectLit {
+              span: DUMMY_SP,
+              props: exports
+                .into_iter()
+                .map(|(exported, local)| {
+                  PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                    key: PropName::Ident(IdentName::new(exported.into(), DUMMY_SP)),
+                    value: Box::new(Expr::Arrow(ArrowExpr {
+                      span: DUMMY_SP,
+                      ctxt: Default::default(),
+                      params: vec![],
+                      body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Ident(
+                        Ident::new_no_ctxt(local.into(), DUMMY_SP),
+                      )))),
+                      is_async: false,
+                      is_generator: false,
+                      type_params: None,
+                      return_type: None,
+                    })),
+                  })))
+                })
+                .collect(),
+            })),
+          },
+        ],
+        type_args: None,
+      })),
     }))
   }
 
@@ -289,5 +425,31 @@ impl SwcCompiler {
 
     // 收集到的内容直接转换为 string
     String::from_utf8(buf).map_err(|e| format!("emit module 结果不是合法 utf8: {}", e))
+  }
+}
+
+struct ImportedBindingRewriter {
+  bindings: HashMap<String, (String, String)>,
+}
+
+impl VisitMut for ImportedBindingRewriter {
+  fn visit_mut_expr(&mut self, expr: &mut swc_ecma_ast::Expr) {
+    use swc_ecma_ast::*;
+
+    if let Expr::Ident(ident) = expr {
+      if let Some((namespace, imported)) = self.bindings.get(ident.sym.as_ref()) {
+        *expr = Expr::Member(MemberExpr {
+          span: DUMMY_SP,
+          obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
+            namespace.clone().into(),
+            DUMMY_SP,
+          ))),
+          prop: MemberProp::Ident(IdentName::new(imported.clone().into(), DUMMY_SP)),
+        });
+        return;
+      }
+    }
+
+    expr.visit_mut_children_with(self);
   }
 }

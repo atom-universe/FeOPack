@@ -200,11 +200,14 @@ impl Compilation {
         // 这里的 PathBuf 是。。。
         let ast: Program = compiler.parse_js(PathBuf::from(&module_id), source)?;
         let raw_imports = compiler.collect_imports(&ast)?;
+        println!("raw_imports: {:#?}", raw_imports);
         let imports = self.resolve_imports(&module_id, raw_imports)?;
+        println!("resolved_imports: {:#?}", imports);
         let transformed_ast = compiler.transform_module_ast(ast, &imports)?;
 
         let generated_source = compiler.emit_module(&transformed_ast)?;
         println!("ast 生成源码: {}", generated_source);
+
         println!("imports: {:#?}", imports);
 
         codegen_modules.push(CodegenModule {
@@ -221,10 +224,12 @@ impl Compilation {
         println!("  source length: {}", codegen_module.source.len());
 
         for import in &codegen_module.imports {
+          println!("########################");
           println!(
-            "  import local={} request={} module_id={}",
-            import.local, import.request, import.module_id
+            "  import:\n    local: {}\n    imported: {}\n    request: {}\n    module_id: {}",
+            import.local, import.imported, import.request, import.module_id
           );
+          println!("########################");
         }
       }
 
@@ -319,6 +324,7 @@ __feopack_import__("{}");
 
       imports.push(ResolvedImportRecord {
         local: raw_import.local,
+        imported: raw_import.imported,
         request: raw_import.request,
         module_id: dep_module_id,
       });
