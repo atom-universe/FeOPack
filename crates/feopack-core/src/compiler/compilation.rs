@@ -1,5 +1,5 @@
 use crate::module_graph::{Module, ModuleGraph};
-use crate::swc_compiler::{RawImportRecord, SwcCompiler};
+use crate::swc_compiler::{RawImportRecord, ResolvedImportRecord, SwcCompiler};
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use swc_ecma_ast::{ModuleDecl, ModuleItem, Program};
@@ -38,17 +38,10 @@ pub struct GeneratedAsset {
 }
 
 #[derive(Debug, Clone)]
-struct ImportRecord {
-  local: String,
-  request: String,
-  module_id: String,
-}
-
-#[derive(Debug, Clone)]
 struct CodegenModule {
   id: String,
   source: String,
-  imports: Vec<ImportRecord>,
+  imports: Vec<ResolvedImportRecord>,
 }
 
 #[derive(Debug)]
@@ -179,9 +172,10 @@ impl Compilation {
 
   // 代码生成：为每个模块生成代码并创建 bundle
   async fn code_generation(&mut self) -> Result<(), String> {
-    // let entry_path = context.join(&self.options.entry);
-    // let normalized_entry = Self::normalize_path(&entry_path)?;
-    // let entry_module_id = normalized_entry.to_string_lossy().to_string();
+    let context = Path::new(&self.options.context);
+    let entry_path = context.join(&self.options.entry);
+    let normalized_entry = Self::normalize_path(&entry_path)?;
+    let entry_module_id = normalized_entry.to_string_lossy().to_string();
 
     for chunk in &self.chunk_graph.chunks {
       // pair list，(module id, source)
@@ -207,8 +201,9 @@ impl Compilation {
         let ast: Program = compiler.parse_js(PathBuf::from(&module_id), source)?;
         let raw_imports = compiler.collect_imports(&ast)?;
         let imports = self.resolve_imports(&module_id, raw_imports)?;
+        let transformed_ast = compiler.transform_module_ast(ast, &imports)?;
 
-        let generated_source = compiler.emit_module(&ast)?;
+        let generated_source = compiler.emit_module(&transformed_ast)?;
         println!("ast 生成源码: {}", generated_source);
         println!("imports: {:#?}", imports);
 
@@ -219,25 +214,7 @@ impl Compilation {
         });
       }
 
-      //   codegen modules: [
-      //     CodegenModule {
-      //         id: "/Users/carbon/Desktop/programms/infra/feopack/packages/playground/cases/chunk/basic/src/app.js",
-      //         source: "export default function title(t) {\n    console.log(\"Title:\", t);\n    if (typeof document !== \"undefined\") {\n        document.title = t;\n    }\n}\n",
-      //         imports: [],
-      //     },
-      //     CodegenModule {
-      //         id: "/Users/carbon/Desktop/programms/infra/feopack/packages/playground/cases/chunk/basic/src/index.js",
-      //         source: "import title from \"./app.js\";\ntitle(\"Hello FeOPack\");\n",
-      //         imports: [
-      //             ImportRecord {
-      //                 local: "title",
-      //                 request: "./app.js",
-      //                 module_id: "/Users/carbon/Desktop/programms/infra/feopack/packages/playground/cases/chunk/basic/src/app.js",
-      //             },
-      //         ],
-      //     },
-      //  ]
-      println!("codegen modules: {:#?}", codegen_modules);
+      let source = Self::render_chunk(&entry_module_id, &codegen_modules);
 
       for codegen_module in &codegen_modules {
         println!("  module id: {}", codegen_module.id);
@@ -250,15 +227,66 @@ impl Compilation {
           );
         }
       }
+
+      self.assets.push(GeneratedAsset {
+        filename: self.options.output.filename.clone(),
+        source,
+      });
     }
     Ok(())
+  }
+
+  // 之前是 cjs 风格，现在换到 esm 风格
+  // 谢谢 ai 帮忙处理（写了几次都有问题）
+  fn render_chunk(entry_module_id: &str, modules: &[CodegenModule]) -> String {
+    let mut modules_code = String::new();
+
+    for module in modules {
+      let module_source = module
+        .source
+        .lines()
+        .map(|line| format!("    {}", line))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+      modules_code.push_str(&format!(
+        r#"  "{}": (__feopack_module__, __feopack_import__) => {{
+{}
+  }},
+"#,
+        module.id, module_source
+      ));
+    }
+
+    format!(
+      r#"const __feopack_modules__ = {{
+{}}};
+
+const __feopack_cache__ = {{}};
+
+function __feopack_import__(id) {{
+  if (__feopack_cache__[id]) {{
+    return __feopack_cache__[id].exports;
+  }}
+
+  const __feopack_module__ = {{ exports: {{}} }};
+  __feopack_cache__[id] = __feopack_module__;
+  __feopack_modules__[id](__feopack_module__, __feopack_import__);
+
+  return __feopack_module__.exports;
+}}
+
+__feopack_import__("{}");
+"#,
+      modules_code, entry_module_id
+    )
   }
 
   fn resolve_imports(
     &self,
     module_id: &str,
     raw_imports: Vec<RawImportRecord>,
-  ) -> Result<Vec<ImportRecord>, String> {
+  ) -> Result<Vec<ResolvedImportRecord>, String> {
     let context = Path::new(&self.options.context);
     let module_path = PathBuf::from(module_id);
     let module_dir = module_path
@@ -275,7 +303,7 @@ impl Compilation {
         .to_string_lossy()
         .to_string();
 
-      imports.push(ImportRecord {
+      imports.push(ResolvedImportRecord {
         local: raw_import.local,
         request: raw_import.request,
         module_id: dep_module_id,

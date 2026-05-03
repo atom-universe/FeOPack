@@ -1,4 +1,4 @@
-use swc_common::{sync::Lrc, FileName, SourceMap};
+use swc_common::{sync::Lrc, FileName, SourceMap, DUMMY_SP};
 use swc_ecma_ast::{EsVersion, ModuleDecl, ModuleItem, Program};
 use swc_ecma_codegen::{text_writer::JsWriter, Config, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
@@ -7,6 +7,13 @@ use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 pub struct RawImportRecord {
   pub local: String,
   pub request: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedImportRecord {
+  pub local: String,
+  pub request: String,
+  pub module_id: String,
 }
 
 pub struct SwcCompiler {
@@ -83,6 +90,129 @@ impl SwcCompiler {
     }
 
     Ok(imports)
+  }
+
+  // 处理 ast 这段也让 ai 处理了，实在是看力竭了
+
+  pub fn transform_module_ast(
+    &self,
+    program: Program,
+    imports: &[ResolvedImportRecord],
+  ) -> Result<Program, String> {
+    use swc_ecma_ast::*;
+
+    let Program::Module(module) = program else {
+      return Err("不支持 Script 模式".into());
+    };
+
+    let mut body = Vec::new();
+
+    for item in module.body {
+      match item {
+        ModuleItem::ModuleDecl(ModuleDecl::Import(import_decl)) => {
+          let request = import_decl
+            .src
+            .value
+            .as_str()
+            .ok_or_else(|| "import 路径不是合法 utf8".to_string())?
+            .to_string();
+
+          for specifier in import_decl.specifiers {
+            if let ImportSpecifier::Default(default_specifier) = specifier {
+              let import_record = imports
+                .iter()
+                .find(|import| {
+                  import.request == request && default_specifier.local.sym == import.local
+                })
+                .ok_or_else(|| format!("找不到 import 记录: {}", request))?;
+
+              let import_call = Expr::Call(CallExpr {
+                span: DUMMY_SP,
+                ctxt: Default::default(),
+                callee: Callee::Expr(Box::new(Expr::Ident(Ident::new_no_ctxt(
+                  "__feopack_import__".into(),
+                  DUMMY_SP,
+                )))),
+                args: vec![ExprOrSpread {
+                  spread: None,
+                  expr: Box::new(Expr::Lit(Lit::Str(Str {
+                    span: DUMMY_SP,
+                    value: import_record.module_id.clone().into(),
+                    raw: None,
+                  }))),
+                }],
+                type_args: None,
+              });
+
+              let default_member = Expr::Member(MemberExpr {
+                span: DUMMY_SP,
+                obj: Box::new(import_call),
+                prop: MemberProp::Ident(IdentName::from("default")),
+              });
+
+              body.push(ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                span: DUMMY_SP,
+                ctxt: Default::default(),
+                kind: VarDeclKind::Const,
+                declare: false,
+                decls: vec![VarDeclarator {
+                  span: DUMMY_SP,
+                  name: Pat::Ident(default_specifier.local.into()),
+                  init: Some(Box::new(default_member)),
+                  definite: false,
+                }],
+              })))));
+            }
+          }
+        }
+
+        ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultDecl(export_decl)) => {
+          match export_decl.decl {
+            DefaultDecl::Fn(fn_expr) => {
+              let ident = fn_expr
+                .ident
+                .ok_or_else(|| "暂不支持匿名 export default function".to_string())?;
+
+              body.push(ModuleItem::Stmt(Stmt::Decl(Decl::Fn(FnDecl {
+                ident: ident.clone(),
+                declare: false,
+                function: fn_expr.function,
+              }))));
+
+              body.push(ModuleItem::Stmt(Stmt::Expr(ExprStmt {
+                span: DUMMY_SP,
+                expr: Box::new(Expr::Assign(AssignExpr {
+                  span: DUMMY_SP,
+                  op: op!("="),
+                  left: AssignTarget::from(MemberExpr {
+                    span: DUMMY_SP,
+                    obj: Box::new(Expr::Member(MemberExpr {
+                      span: DUMMY_SP,
+                      obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
+                        "__feopack_module__".into(),
+                        DUMMY_SP,
+                      ))),
+                      prop: MemberProp::Ident(IdentName::from("exports")),
+                    })),
+                    prop: MemberProp::Ident(IdentName::from("default")),
+                  }),
+                  right: Box::new(Expr::Ident(ident)),
+                })),
+              })));
+            }
+            _ => return Err("暂只支持 export default function".into()),
+          }
+        }
+
+        other => body.push(other),
+      }
+    }
+
+    Ok(Program::Module(Module {
+      span: module.span,
+      body,
+      shebang: module.shebang,
+    }))
   }
 
   // 这个并非emit阶段用的，而是seal阶段消费module，生成代码用的
