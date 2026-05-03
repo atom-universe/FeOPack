@@ -126,7 +126,7 @@ impl Compilation {
   // module graph -> chunk graph
   pub async fn seal(&mut self) -> Result<(), String> {
     println!(
-      "\n[rust seal 阶段] module graph -> chunk graph: {:?}",
+      "\n[rust seal 阶段] module graph -> chunk graph:\n {:?}\n",
       self.module_graph.partials
     );
     self.create_chunk_graph().await;
@@ -167,11 +167,10 @@ impl Compilation {
   async fn code_generation(&mut self) -> Result<(), String> {
     let context = Path::new(&self.options.context);
     let entry_path = context.join(&self.options.entry);
-    let normalized_entry = Self::normalize_path(&entry_path)?;
-    let entry_module_id = normalized_entry.to_string_lossy().to_string();
-
+    // let normalized_entry = Self::normalize_path(&entry_path)?;
+    // let entry_module_id = normalized_entry.to_string_lossy().to_string();
     for chunk in &self.chunk_graph.chunks {
-      let mut modules_code = String::new();
+      // let mut modules_code = String::new();
 
       for module_id in &chunk.module_ids {
         // 读取模块源代码
@@ -179,7 +178,11 @@ impl Compilation {
           .await
           .map_err(|e| format!("读取模块文件失败 {:?}: {}", module_id, e))?;
         println!("模块源代码: {:?}", source);
-
+        let compiler = SwcCompiler::new();
+        let ast = compiler.parse_js(PathBuf::from(module_id), source)?;
+        println!("模块 AST: {:#?}", ast);
+        let generated_source = compiler.emit_module(&ast)?;
+        println!("模块生成代码: {}", generated_source);
         todo!("code generation");
         //  "module_id": function(module, exports, require) { source }
         //       modules_code.push_str(&format!(
@@ -196,27 +199,27 @@ impl Compilation {
         //       ));
         //       modules_code.push('\n');
       }
-      let bundle = format!(
-        r#"(function(modules) {{
-    const cache = {{}};
-    function require(id) {{
-      if (cache[id]) return cache[id].exports;
-      const module = {{ exports: {{}} }};
-      cache[id] = module;
-      modules[id](module, module.exports, require);
-      return module.exports;
-    }}
-    require("{}");
-  }})({{
-  {}
-  }});"#,
-        entry_module_id, modules_code
-      );
+      //     let bundle = format!(
+      //       r#"(function(modules) {{
+      //   const cache = {{}};
+      //   function require(id) {{
+      //     if (cache[id]) return cache[id].exports;
+      //     const module = {{ exports: {{}} }};
+      //     cache[id] = module;
+      //     modules[id](module, module.exports, require);
+      //     return module.exports;
+      //   }}
+      //   require("{}");
+      // }})({{
+      // {}
+      // }});"#,
+      //       entry_module_id, modules_code
+      //     );
 
-      self.assets.push(GeneratedAsset {
-        filename: self.options.output.filename.clone(),
-        source: bundle,
-      });
+      // self.assets.push(GeneratedAsset {
+      //   filename: self.options.output.filename.clone(),
+      //   source: bundle,
+      // });
     }
 
     Ok(())
