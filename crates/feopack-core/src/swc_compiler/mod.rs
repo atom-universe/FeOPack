@@ -181,22 +181,50 @@ impl SwcCompiler {
 
               body.push(ModuleItem::Stmt(Stmt::Expr(ExprStmt {
                 span: DUMMY_SP,
-                expr: Box::new(Expr::Assign(AssignExpr {
+                expr: Box::new(Expr::Call(CallExpr {
                   span: DUMMY_SP,
-                  op: op!("="),
-                  left: AssignTarget::from(MemberExpr {
+                  ctxt: Default::default(),
+                  callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
                     span: DUMMY_SP,
-                    obj: Box::new(Expr::Member(MemberExpr {
-                      span: DUMMY_SP,
-                      obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
-                        "__feopack_module__".into(),
-                        DUMMY_SP,
-                      ))),
-                      prop: MemberProp::Ident(IdentName::from("exports")),
-                    })),
-                    prop: MemberProp::Ident(IdentName::from("default")),
-                  }),
-                  right: Box::new(Expr::Ident(ident)),
+                    obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
+                      "__feopack_import__".into(),
+                      DUMMY_SP,
+                    ))),
+                    prop: MemberProp::Ident(IdentName::from("d")),
+                  }))),
+                  args: vec![
+                    ExprOrSpread {
+                      spread: None,
+                      expr: Box::new(Expr::Member(MemberExpr {
+                        span: DUMMY_SP,
+                        obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
+                          "__feopack_module__".into(),
+                          DUMMY_SP,
+                        ))),
+                        prop: MemberProp::Ident(IdentName::from("exports")),
+                      })),
+                    },
+                    ExprOrSpread {
+                      spread: None,
+                      expr: Box::new(Expr::Object(ObjectLit {
+                        span: DUMMY_SP,
+                        props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                          key: PropName::Ident(IdentName::from("default")),
+                          value: Box::new(Expr::Arrow(ArrowExpr {
+                            span: DUMMY_SP,
+                            ctxt: Default::default(),
+                            params: vec![],
+                            body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Ident(ident)))),
+                            is_async: false,
+                            is_generator: false,
+                            type_params: None,
+                            return_type: None,
+                          })),
+                        })))],
+                      })),
+                    },
+                  ],
+                  type_args: None,
                 })),
               })));
             }

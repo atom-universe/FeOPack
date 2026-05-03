@@ -276,6 +276,20 @@ function __feopack_import__(id) {{
   return __feopack_module__.exports;
 }}
 
+__feopack_import__.d = (exports, definition) => {{
+  for (const key in definition) {{
+    if (
+      Object.prototype.hasOwnProperty.call(definition, key) &&
+      !Object.prototype.hasOwnProperty.call(exports, key)
+    ) {{
+      Object.defineProperty(exports, key, {{
+        enumerable: true,
+        get: definition[key],
+      }});
+    }}
+  }}
+}};
+
 __feopack_import__("{}");
 "#,
       modules_code, entry_module_id
