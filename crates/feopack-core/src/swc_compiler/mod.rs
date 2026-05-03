@@ -1,7 +1,13 @@
 use swc_common::{sync::Lrc, FileName, SourceMap};
-use swc_ecma_ast::{EsVersion, Program};
+use swc_ecma_ast::{EsVersion, ModuleDecl, ModuleItem, Program};
 use swc_ecma_codegen::{text_writer::JsWriter, Config, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
+
+#[derive(Debug, Clone)]
+pub struct RawImportRecord {
+  pub local: String,
+  pub request: String,
+}
 
 pub struct SwcCompiler {
   // SourceMap 是 swc 的源码管理器，用于管理源码文件和位置信息
@@ -18,6 +24,7 @@ impl SwcCompiler {
     }
   }
 
+  // 源码 -> ast
   pub fn parse_js(&self, file_path: std::path::PathBuf, source: String) -> Result<Program, String> {
     // 1. 创建 SourceFile
     let filename: Lrc<FileName> = FileName::Real(file_path).into();
@@ -48,7 +55,40 @@ impl SwcCompiler {
     Ok(Program::Module(program))
   }
 
+  pub fn collect_imports(&self, program: &Program) -> Result<Vec<RawImportRecord>, String> {
+    let mut imports = Vec::new();
+
+    let Program::Module(module) = program else {
+      return Err("不支持 Script 模式".into());
+    };
+
+    for item in &module.body {
+      if let ModuleItem::ModuleDecl(ModuleDecl::Import(import_decl)) = item {
+        let request = import_decl
+          .src
+          .value
+          .as_str()
+          .ok_or_else(|| "import 路径不是合法 utf8".to_string())?
+          .to_string();
+
+        for specifier in &import_decl.specifiers {
+          if let swc_ecma_ast::ImportSpecifier::Default(default_specifier) = specifier {
+            imports.push(RawImportRecord {
+              local: default_specifier.local.sym.to_string(),
+              request: request.clone(),
+            });
+          }
+        }
+      }
+    }
+
+    Ok(imports)
+  }
+
   // 这个并非emit阶段用的，而是seal阶段消费module，生成代码用的
+  // ast -> js（chunk 内的代码，我理解的是属于chunk内代码到 esm 风格可运行代码的过渡产物）
+  // 这里 js -> ast -> js, 中间最大的变化就是，把 js 里面的 import 等语句劫持修改了
+  //? 但是怎么想都是一个极其低效的过程，能不能有一种办法，直接一步到位，或者尽可能减小开销呢？
   pub fn emit_module(&self, program: &Program) -> Result<String, String> {
     // 哎，似乎 swc 各种生态版本兼容对齐也是一个难题诶，to_code 用不了——死去的回忆开始攻击我
     // Ok(to_code(program))

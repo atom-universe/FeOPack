@@ -50,7 +50,7 @@
     "format:rs": "cargo fmt",
     "lint": "oxlint .",
     "prepublishOnly": "napi prepublish -t npm",
-    "test": "node packages/playground/scripts/test.js",
+    "test": "npm run build:update && node packages/playground/scripts/test.js",
     "preversion": "napi build --platform && git add .",
     "version": "napi version",
     "prepare": "husky"

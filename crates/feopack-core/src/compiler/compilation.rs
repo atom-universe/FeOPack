@@ -1,5 +1,5 @@
 use crate::module_graph::{Module, ModuleGraph};
-use crate::swc_compiler::SwcCompiler;
+use crate::swc_compiler::{RawImportRecord, SwcCompiler};
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use swc_ecma_ast::{ModuleDecl, ModuleItem, Program};
@@ -35,6 +35,20 @@ pub struct ChunkGraph {
 pub struct GeneratedAsset {
   pub filename: String,
   pub source: String,
+}
+
+#[derive(Debug, Clone)]
+struct ImportRecord {
+  local: String,
+  request: String,
+  module_id: String,
+}
+
+#[derive(Debug, Clone)]
+struct CodegenModule {
+  id: String,
+  source: String,
+  imports: Vec<ImportRecord>,
 }
 
 #[derive(Debug)]
@@ -165,12 +179,13 @@ impl Compilation {
 
   // 代码生成：为每个模块生成代码并创建 bundle
   async fn code_generation(&mut self) -> Result<(), String> {
-    let context = Path::new(&self.options.context);
-    let entry_path = context.join(&self.options.entry);
+    // let entry_path = context.join(&self.options.entry);
     // let normalized_entry = Self::normalize_path(&entry_path)?;
     // let entry_module_id = normalized_entry.to_string_lossy().to_string();
+
     for chunk in &self.chunk_graph.chunks {
-      // let mut modules_code = String::new();
+      // pair list，(module id, source)
+      let mut module_sources = Vec::new();
 
       for module_id in &chunk.module_ids {
         // 读取模块源代码
@@ -178,51 +193,96 @@ impl Compilation {
           .await
           .map_err(|e| format!("读取模块文件失败 {:?}: {}", module_id, e))?;
         println!("模块源代码: {:?}", source);
-        let compiler = SwcCompiler::new();
-        let ast = compiler.parse_js(PathBuf::from(module_id), source)?;
-        println!("模块 AST: {:#?}", ast);
-        let generated_source = compiler.emit_module(&ast)?;
-        println!("模块生成代码: {}", generated_source);
-        todo!("code generation");
-        //  "module_id": function(module, exports, require) { source }
-        //       modules_code.push_str(&format!(
-        //         r#""{}": function(module, exports, require) {{
-        // {}
-        // }},"#,
-        //         module_id,
-        //         // 缩进
-        //         source
-        //           .lines()
-        //           .map(|line| format!("  {}", line))
-        //           .collect::<Vec<_>>()
-        //           .join("\n")
-        //       ));
-        //       modules_code.push('\n');
+        module_sources.push((module_id.clone(), source));
       }
-      //     let bundle = format!(
-      //       r#"(function(modules) {{
-      //   const cache = {{}};
-      //   function require(id) {{
-      //     if (cache[id]) return cache[id].exports;
-      //     const module = {{ exports: {{}} }};
-      //     cache[id] = module;
-      //     modules[id](module, module.exports, require);
-      //     return module.exports;
-      //   }}
-      //   require("{}");
-      // }})({{
-      // {}
-      // }});"#,
-      //       entry_module_id, modules_code
-      //     );
 
-      // self.assets.push(GeneratedAsset {
-      //   filename: self.options.output.filename.clone(),
-      //   source: bundle,
-      // });
+      // 这里其实是因为我也不太熟悉 rust 的一些特性
+      // 出现各种跨线程的抽象问题
+      // 所以直接选择了简单省事地在每个 chunk 处理过程中都开一个 compiler 来处理 ast
+      let compiler = SwcCompiler::new();
+      let mut codegen_modules: Vec<CodegenModule> = Vec::new();
+
+      for (module_id, source) in module_sources {
+        // 这里的 PathBuf 是。。。
+        let ast: Program = compiler.parse_js(PathBuf::from(&module_id), source)?;
+        let raw_imports = compiler.collect_imports(&ast)?;
+        let imports = self.resolve_imports(&module_id, raw_imports)?;
+
+        let generated_source = compiler.emit_module(&ast)?;
+        println!("ast 生成源码: {}", generated_source);
+        println!("imports: {:#?}", imports);
+
+        codegen_modules.push(CodegenModule {
+          id: module_id,
+          source: generated_source,
+          imports,
+        });
+      }
+
+      //   codegen modules: [
+      //     CodegenModule {
+      //         id: "/Users/carbon/Desktop/programms/infra/feopack/packages/playground/cases/chunk/basic/src/app.js",
+      //         source: "export default function title(t) {\n    console.log(\"Title:\", t);\n    if (typeof document !== \"undefined\") {\n        document.title = t;\n    }\n}\n",
+      //         imports: [],
+      //     },
+      //     CodegenModule {
+      //         id: "/Users/carbon/Desktop/programms/infra/feopack/packages/playground/cases/chunk/basic/src/index.js",
+      //         source: "import title from \"./app.js\";\ntitle(\"Hello FeOPack\");\n",
+      //         imports: [
+      //             ImportRecord {
+      //                 local: "title",
+      //                 request: "./app.js",
+      //                 module_id: "/Users/carbon/Desktop/programms/infra/feopack/packages/playground/cases/chunk/basic/src/app.js",
+      //             },
+      //         ],
+      //     },
+      //  ]
+      println!("codegen modules: {:#?}", codegen_modules);
+
+      for codegen_module in &codegen_modules {
+        println!("  module id: {}", codegen_module.id);
+        println!("  source length: {}", codegen_module.source.len());
+
+        for import in &codegen_module.imports {
+          println!(
+            "  import local={} request={} module_id={}",
+            import.local, import.request, import.module_id
+          );
+        }
+      }
+    }
+    Ok(())
+  }
+
+  fn resolve_imports(
+    &self,
+    module_id: &str,
+    raw_imports: Vec<RawImportRecord>,
+  ) -> Result<Vec<ImportRecord>, String> {
+    let context = Path::new(&self.options.context);
+    let module_path = PathBuf::from(module_id);
+    let module_dir = module_path
+      .parent()
+      .ok_or_else(|| format!("无法获取模块目录: {}", module_id))?;
+
+    // 一个很有意思的事情：为什么不用 map 而是用 vec 呢？
+    // 因为这里 import 是有顺序的，所以用 vec 更合适，妙啊
+    let mut imports = Vec::new();
+
+    for raw_import in raw_imports {
+      let dep_path = Self::resolve_path(&raw_import.request, module_dir, context)?;
+      let dep_module_id = Self::normalize_path(&dep_path)?
+        .to_string_lossy()
+        .to_string();
+
+      imports.push(ImportRecord {
+        local: raw_import.local,
+        request: raw_import.request,
+        module_id: dep_module_id,
+      });
     }
 
-    Ok(())
+    Ok(imports)
   }
 
   // 创建模块 assets（当前实现中已经在 code_generation 中完成）
