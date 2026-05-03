@@ -1,6 +1,6 @@
 <div align="center">
 
-# FeOPack
+# feopack
 
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Node](https://img.shields.io/badge/Node-%3E%3D16-green.svg)](https://nodejs.org/)
