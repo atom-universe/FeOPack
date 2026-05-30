@@ -44,6 +44,12 @@ struct CodegenModule {
   imports: Vec<ResolvedImportRecord>,
 }
 
+#[derive(Debug, Clone)]
+enum ResolvedPath {
+  File(PathBuf),
+  External(String),
+}
+
 #[derive(Debug)]
 pub struct Compilation {
   pub options: CompilationOptions,
@@ -103,10 +109,10 @@ impl Compilation {
             if let Some(dep) = import.src.value.as_str() {
               let dep = dep.to_string();
 
-              let dep_path = Self::resolve_path(&dep, module_dir, context)?;
-
               dependencies.push(dep.clone());
-              queue.push_back(dep_path);
+              if let ResolvedPath::File(dep_path) = Self::resolve_path(&dep, module_dir, context)? {
+                queue.push_back(dep_path);
+              }
             }
           }
         }
@@ -195,20 +201,26 @@ impl Compilation {
       // 所以直接选择了简单省事地在每个 chunk 处理过程中都开一个 compiler 来处理 ast
       let compiler = SwcCompiler::new();
       let mut codegen_modules: Vec<CodegenModule> = Vec::new();
+      // 外部依赖不进入本地 module graph，运行时交给 Node require 处理。
+      let mut external_module_ids = HashSet::new();
 
       for (module_id, source) in module_sources {
         // 这里的 PathBuf 是。。。
         let ast: Program = compiler.parse_js(PathBuf::from(&module_id), source)?;
         let raw_imports = compiler.collect_imports(&ast)?;
-        println!("raw_imports: {:#?}", raw_imports);
+        // println!("raw_imports: {:#?}", raw_imports);
         let imports = self.resolve_imports(&module_id, raw_imports)?;
-        println!("resolved_imports: {:#?}", imports);
+        // println!("resolved_imports: {:#?}", imports);
+        for import in &imports {
+          if import.external {
+            external_module_ids.insert(import.module_id.clone());
+          }
+        }
         let transformed_ast = compiler.transform_module_ast(ast, &imports)?;
 
         let generated_source = compiler.emit_module(&transformed_ast)?;
-        println!("ast 生成源码: {}", generated_source);
-
-        println!("imports: {:#?}", imports);
+        // println!("ast 生成源码: {}", generated_source);
+        // println!("imports: {:#?}", imports);
 
         codegen_modules.push(CodegenModule {
           id: module_id,
@@ -217,21 +229,36 @@ impl Compilation {
         });
       }
 
+      for module_id in external_module_ids {
+        codegen_modules.push(CodegenModule {
+          id: module_id.clone(),
+          source: format!(
+            r#"const __feopack_external__ = require("{}");
+Object.assign(__feopack_exports__, __feopack_external__);
+__feopack_import__.d(__feopack_exports__, {{
+    default: () => __feopack_external__
+}});"#,
+            module_id
+          ),
+          imports: Vec::new(),
+        });
+      }
+
       let source = Self::render_chunk(&entry_module_id, &codegen_modules);
 
-      for codegen_module in &codegen_modules {
-        println!("  module id: {}", codegen_module.id);
-        println!("  source length: {}", codegen_module.source.len());
+      // for codegen_module in &codegen_modules {
+      //   println!("  module id: {}", codegen_module.id);
+      //   println!("  source length: {}", codegen_module.source.len());
 
-        for import in &codegen_module.imports {
-          println!("########################");
-          println!(
-            "  import:\n    local: {}\n    imported: {}\n    request: {}\n    module_id: {}",
-            import.local, import.imported, import.request, import.module_id
-          );
-          println!("########################");
-        }
-      }
+      //   for import in &codegen_module.imports {
+      //     println!("########################");
+      //     println!(
+      //       "  import:\n    local: {}\n    imported: {}\n    request: {}\n    module_id: {}",
+      //       import.local, import.imported, import.request, import.module_id
+      //     );
+      //     println!("########################");
+      //   }
+      // }
 
       self.assets.push(GeneratedAsset {
         filename: self.options.output.filename.clone(),
@@ -255,18 +282,18 @@ impl Compilation {
         .join("\n");
 
       modules_code.push_str(&format!(
-        r#"  "{}": (__feopack_module__, __feopack_import__) => {{
+        r#"  "{}": (__feopack_module__, __feopack_exports__, __feopack_import__) => {{
 {}
   }},
 "#,
         module.id, module_source
       ));
     }
-
+    // !TODO: 可以包一层 IIFE，防止这里 feopack_modules 和 feopack_cache 污染
+    // {}
     format!(
-      r#"const __feopack_modules__ = {{
-{}}};
-
+      r#"
+const __feopack_modules__ = {{{}}};
 const __feopack_cache__ = {{}};
 
 function __feopack_import__(id) {{
@@ -276,7 +303,7 @@ function __feopack_import__(id) {{
 
   const __feopack_module__ = {{ exports: {{}} }};
   __feopack_cache__[id] = __feopack_module__;
-  __feopack_modules__[id](__feopack_module__, __feopack_import__);
+  __feopack_modules__[id](__feopack_module__, __feopack_module__.exports, __feopack_import__);
 
   return __feopack_module__.exports;
 }}
@@ -290,7 +317,7 @@ __feopack_import__.d = (exports, definition) => {{
       Object.defineProperty(exports, key, {{
         enumerable: true,
         get: definition[key],
-      }});
+      }});  
     }}
   }}
 }};
@@ -317,16 +344,21 @@ __feopack_import__("{}");
     let mut imports = Vec::new();
 
     for raw_import in raw_imports {
-      let dep_path = Self::resolve_path(&raw_import.request, module_dir, context)?;
-      let dep_module_id = Self::normalize_path(&dep_path)?
-        .to_string_lossy()
-        .to_string();
+      let resolved_path = Self::resolve_path(&raw_import.request, module_dir, context)?;
+      let external = matches!(resolved_path, ResolvedPath::External(_));
+      let dep_module_id = match resolved_path {
+        ResolvedPath::File(dep_path) => Self::normalize_path(&dep_path)?
+          .to_string_lossy()
+          .to_string(),
+        ResolvedPath::External(module_id) => module_id,
+      };
 
       imports.push(ResolvedImportRecord {
         local: raw_import.local,
         imported: raw_import.imported,
         request: raw_import.request,
         module_id: dep_module_id,
+        external,
       });
     }
 
@@ -349,14 +381,13 @@ __feopack_import__("{}");
     Ok(normalized)
   }
 
-  fn resolve_path(dep: &str, module_dir: &Path, context: &Path) -> Result<PathBuf, String> {
+  fn resolve_path(dep: &str, module_dir: &Path, _context: &Path) -> Result<ResolvedPath, String> {
+    if Self::is_external_request(dep) {
+      return Ok(ResolvedPath::External(dep.to_string()));
+    }
+
     // 如果依赖路径以 . 或 .. 开头，相对于当前模块的目录解析
-    let dep_path = if dep.starts_with('.') {
-      module_dir.join(dep)
-    } else {
-      // 对于非相对路径（如 npm 包），使用 context
-      context.join(dep)
-    };
+    let dep_path = module_dir.join(dep);
 
     // 规范化路径（去除 ./ 等组件）
     let normalized = Self::normalize_path(&dep_path)?;
@@ -372,6 +403,10 @@ __feopack_import__("{}");
       normalized
     };
 
-    Ok(final_path)
+    Ok(ResolvedPath::File(final_path))
+  }
+
+  pub fn is_external_request(request: &str) -> bool {
+    !request.starts_with('.')
   }
 }

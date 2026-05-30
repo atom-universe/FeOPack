@@ -16,8 +16,12 @@ build-crates:
 build-cli:
     cd packages/feopack-cli && pnpm build
 
+build-core:
+    cd packages/feopack && pnpm build
+
 # Build everything and update dependencies
 build-update:
     just build-crates
+    just build-core
     just build-cli
     pnpm i

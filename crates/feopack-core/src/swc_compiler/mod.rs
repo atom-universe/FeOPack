@@ -24,6 +24,8 @@ pub struct ResolvedImportRecord {
   pub request: String,
   // request 字段对应的完整路径 'User/阿巴巴/xx/xxx'
   pub module_id: String,
+  // 是否是 external 依赖，external 不进入本地文件构建队列
+  pub external: bool,
 }
 
 pub struct SwcCompiler {
@@ -338,14 +340,10 @@ impl SwcCompiler {
         args: vec![
           ExprOrSpread {
             spread: None,
-            expr: Box::new(Expr::Member(MemberExpr {
-              span: DUMMY_SP,
-              obj: Box::new(Expr::Ident(Ident::new_no_ctxt(
-                "__feopack_module__".into(),
-                DUMMY_SP,
-              ))),
-              prop: MemberProp::Ident(IdentName::from("exports")),
-            })),
+            expr: Box::new(Expr::Ident(Ident::new_no_ctxt(
+              "__feopack_exports__".into(),
+              DUMMY_SP,
+            ))),
           },
           ExprOrSpread {
             spread: None,

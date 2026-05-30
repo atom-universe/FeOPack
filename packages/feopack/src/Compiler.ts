@@ -31,19 +31,19 @@ export class Compiler {
     return this.#inner!
   }
 
-  #build() {
+  async #build() {
     // rust, 启动！
     const inner = this.#getInner()
-    inner.build()
+    await inner.build()
     // TODO: 目前没有插件的部分，所以暂时用不到 nodejs 的 compilation
     // this.compilation = new Compilation(this, inner)
   }
 
-  compile() {
-    this.#build()
+  async compile() {
+    await this.#build()
   }
 
-  run() {
-    this.compile()
+  async run() {
+    await this.compile()
   }
 }

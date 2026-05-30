@@ -44,10 +44,12 @@ function executeDist(config) {
 
 const CONFIG_FILENAME = 'rspack.config.js';
 
-function run(filter = []) {
+async function run(filter = []) {
   const rootPath = path.join(__dirname, '../cases');
   // TODO: 更完美的版本可以支持中断
   // TODO: 支持遍历模式设置 -- DFS、BFS、甚至更多更加复杂的遍历
+
+  const tasks = [];
 
   walk(rootPath, ({ fullPath, dirent }) => {
     if (dirent.name === CONFIG_FILENAME) {
@@ -56,13 +58,19 @@ function run(filter = []) {
       const casePath = path.relative(rootPath, parent);
 
       if (!filter.length || filter.includes(casePath)) {
-        delete require.cache[require.resolve(fullPath)];
-        const config = normalizeConfig(require(fullPath), parent);
-        feopack(config).run();
-        executeDist(config);
+        tasks.push(async () => {
+          delete require.cache[require.resolve(fullPath)];
+          const config = normalizeConfig(require(fullPath), parent);
+          await feopack(config).run();
+          executeDist(config);
+        });
       }
     }
   });
+
+  for (const task of tasks) {
+    await task();
+  }
 };
 
 
