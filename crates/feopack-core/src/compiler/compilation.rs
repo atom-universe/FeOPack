@@ -41,7 +41,7 @@ pub struct GeneratedAsset {
 struct CodegenModule {
   id: String,
   source: String,
-  imports: Vec<ResolvedImportRecord>,
+  // imports: Vec<ResolvedImportRecord>,
 }
 
 #[derive(Debug, Clone)]
@@ -322,7 +322,7 @@ __feopack_import__.d = (exports, definition) => {{
       Object.defineProperty(exports, key, {{
         enumerable: true,
         get: definition[key],
-      }});  
+      }});
     }}
   }}
 }};
