@@ -1,6 +1,8 @@
+use crate::loader::text_loader::text_loader;
+use crate::loader::{LoaderRegistry, LoaderRule};
 use crate::module_graph::{Module, ModuleGraph};
 use crate::swc_compiler::{RawImportRecord, ResolvedImportRecord, SwcCompiler};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use swc_ecma_ast::{ModuleDecl, ModuleItem, Program};
 use tokio::fs::read_to_string;
@@ -41,7 +43,6 @@ pub struct GeneratedAsset {
 struct CodegenModule {
   id: String,
   source: String,
-  // imports: Vec<ResolvedImportRecord>,
 }
 
 #[derive(Debug, Clone)]
@@ -56,16 +57,27 @@ pub struct Compilation {
   pub module_graph: ModuleGraph,
   pub chunk_graph: ChunkGraph,
   pub assets: Vec<GeneratedAsset>,
+  module_sources: HashMap<String, String>,
+  loader_registry: LoaderRegistry,
 }
 
 impl Compilation {
   pub fn new(options: CompilationOptions) -> Self {
     println!("\n\nCompilation new: {:?}\n\n", options);
+    let mut loader_registry = LoaderRegistry::new();
+    loader_registry.register_loader("text-loader".to_string(), text_loader);
+    loader_registry.add_rule(LoaderRule {
+      test: ".txt".to_string(),
+      used_loaders: vec!["text-loader".to_string()],
+    });
+
     Self {
       options: options.clone(),
       module_graph: ModuleGraph::new(),
       chunk_graph: ChunkGraph::default(),
       assets: Vec::new(),
+      module_sources: HashMap::new(),
+      loader_registry,
     }
   }
 
@@ -91,16 +103,14 @@ impl Compilation {
       }
       visited.insert(module_path.clone());
 
-      let source = read_to_string(&module_path)
-        .await
-        .map_err(|e| format!("读取文件失败 {:?}: {}", module_path, e))?;
+      let source = self.load_module_source(&module_path).await?;
 
       // 为什么每次都重复用一个？（当初肯定是为了图省事，搞不定 rust 的引用最后妥协了）
       // TODO: 这里底层是这样的：let source_file = self.source_map.new_source_file(filename, source);
       // 所以如果是现在这样的写法，恐怕无法共享sourcemap（不过这有什么坏处呢？）
 
       let compiler = SwcCompiler::new();
-      let ast = compiler.parse_js(module_path.clone(), source)?;
+      let ast = compiler.parse_js(module_path.clone(), source.clone())?;
 
       let mut dependencies = Vec::new();
 
@@ -128,6 +138,7 @@ impl Compilation {
       // 规范化路径，去除 ./ 等相对路径组件，使其可以直接用于文件读取
       let normalized_path = Self::normalize_path(&module_path)?;
       let module_id = normalized_path.to_string_lossy().to_string();
+      self.module_sources.insert(module_id.clone(), source);
       let module = Module::new(module_id.clone(), Some(dependencies));
 
       self.module_graph.add_single_module(module_id, module);
@@ -189,14 +200,14 @@ impl Compilation {
     let entry_module_id = normalized_entry.to_string_lossy().to_string();
 
     for chunk in &self.chunk_graph.chunks {
-      // pair list，(module id, source)
       let mut module_sources = Vec::new();
 
       for module_id in &chunk.module_ids {
-        // 读取模块源代码
-        let source = read_to_string(module_id)
-          .await
-          .map_err(|e| format!("读取模块文件失败 {:?}: {}", module_id, e))?;
+        let source = self
+          .module_sources
+          .get(module_id)
+          .ok_or_else(|| format!("找不到模块源码: {}", module_id))?
+          .clone();
         println!("模块源代码: {:?}", source);
         module_sources.push((module_id.clone(), source));
       }
@@ -230,7 +241,6 @@ impl Compilation {
         codegen_modules.push(CodegenModule {
           id: module_id,
           source: generated_source,
-          imports,
         });
       }
 
@@ -245,7 +255,6 @@ __feopack_import__.d(__feopack_exports__, {{
 }});"#,
             module_id
           ),
-          imports: Vec::new(),
         });
       }
 
@@ -368,6 +377,14 @@ __feopack_import__("{}");
     }
 
     Ok(imports)
+  }
+
+  async fn load_module_source(&self, module_path: &PathBuf) -> Result<String, String> {
+    let source = read_to_string(module_path)
+      .await
+      .map_err(|e| format!("读取模块文件失败 {:?}: {}", module_path, e))?;
+
+    self.loader_registry.run(module_path.clone(), source)
   }
 
   // 创建模块 assets（当前实现中已经在 code_generation 中完成）
