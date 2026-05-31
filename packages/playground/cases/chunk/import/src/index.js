@@ -1,3 +1,4 @@
-import { readFileData } from './app.js'
+import { readFileData, writeFileData } from './app.js'
 
+writeFileData()
 readFileData()

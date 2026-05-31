@@ -73,11 +73,13 @@ impl Compilation {
   /*
    * 这里 rspack 实际情况是把数据结构转为 EntryDependency, 然后通过 ModuleFactory 创建 Module
    * 另外还会开一个 Task Loop 做并行调度, 这里就用 BFS 大致模拟
+   * TODO: 等我完全处理好了基本的打包流程后，再回头看下 rspack 是怎么做的
    */
   pub async fn make(&mut self) -> Result<(), String> {
     let context = Path::new(&self.options.context);
     let entry_path = context.join(&self.options.entry);
 
+    // 朴素剪枝
     let mut queue = VecDeque::new();
     let mut visited = HashSet::new();
 
@@ -93,13 +95,16 @@ impl Compilation {
         .await
         .map_err(|e| format!("读取文件失败 {:?}: {}", module_path, e))?;
 
+      // 为什么每次都重复用一个？（当初肯定是为了图省事，搞不定 rust 的引用最后妥协了）
+      // TODO: 这里底层是这样的：let source_file = self.source_map.new_source_file(filename, source);
+      // 所以如果是现在这样的写法，恐怕无法共享sourcemap（不过这有什么坏处呢？）
+
       let compiler = SwcCompiler::new();
       let ast = compiler.parse_js(module_path.clone(), source)?;
 
       let mut dependencies = Vec::new();
 
       if let Program::Module(module) = ast {
-        // 获取当前模块的父目录，用于解析相对路径
         let module_dir = module_path
           .parent()
           .ok_or_else(|| format!("无法获取模块目录: {:?}", module_path))?;
