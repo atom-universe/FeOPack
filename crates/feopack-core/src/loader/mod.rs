@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub mod text_loader;
+pub mod meow_loader_v1;
 
 // test: '/\.test$/',
 // use_loaders: [
@@ -19,6 +20,12 @@ pub struct LoaderRule {
 pub struct LoaderContext {
   pub resource_path: PathBuf,
   pub source: String,
+  // import xx from 'xx.vue'
+  // virtual request 化后：
+  // import xx from 'xx.vue?type=template'
+  // import xx from 'xx.vue?type=script'
+  // import xx from 'xx.vue?type=style'
+  // pub resource_query: String,
 }
 
 pub type LoaderFn = fn(LoaderContext) -> Result<String, String>;

@@ -52,6 +52,10 @@ async function run(filter = []) {
   const tasks = [];
 
   walk(rootPath, ({ fullPath, dirent }) => {
+    if(fullPath.includes('meow')) {
+      console.log('什么玩意儿', fullPath)
+    }
+
     if (dirent.name === CONFIG_FILENAME) {
       // console.log('fullPath', fullPath);
       const parent = path.dirname(fullPath);

@@ -12,6 +12,8 @@
 
 ✨ 本项目为学习 Rspack 的核心功能实现原理以及项目工程架构而编写。
 
+我也在博客里记录了这个项目的学习过程：[Feopack: Mini Rspack](https://furrycoder.com/posts/feopack/)。
+
 ### 为什么叫 FeO？
 
 - **Rust** 意为"铁锈"。

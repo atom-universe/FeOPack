@@ -4,6 +4,7 @@ mod resolve;
 mod seal;
 
 use crate::loader::text_loader::text_loader;
+use crate::loader::meow_loader_v1::meow_loader_v1;
 use crate::loader::{LoaderRegistry, LoaderRule};
 use crate::module_graph::ModuleGraph;
 use std::collections::HashMap;
@@ -71,11 +72,20 @@ impl Compilation {
   pub fn new(options: CompilationOptions) -> Self {
     println!("\n\nCompilation new: {:?}\n\n", options);
     let mut loader_registry = LoaderRegistry::new();
+
     loader_registry.register_loader("text-loader".to_string(), text_loader);
+    loader_registry.register_loader("meow-loader-v1".to_string(), meow_loader_v1);
+    
+
     loader_registry.add_rule(LoaderRule {
       test: ".txt".to_string(),
       used_loaders: vec!["text-loader".to_string()],
     });
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v1".to_string(),
+      used_loaders: vec!["meow-loader-v1".to_string()],
+    });
+
 
     Self {
       options: options.clone(),
