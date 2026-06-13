@@ -1,0 +1,5 @@
+<meow>🐱</meow>
+
+<script>
+console.log("挂载成功 🐱")
+</script>

@@ -1,5 +1,9 @@
-import { readFileData, writeFileData } from './app.js'
+import { writeFileData } from './app.js'
+import txt from '../data.txt'
+
+
+
+
 
 writeFileData()
-const res = readFileData()
-console.log(res)
+console.log(txt)
