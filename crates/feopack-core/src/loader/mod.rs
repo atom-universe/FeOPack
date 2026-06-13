@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 pub mod text_loader;
 pub mod meow_loader_v1;
+pub mod meow_loader_v2;
+pub mod typescript_loader;
 
 // test: '/\.test$/',
 // use_loaders: [

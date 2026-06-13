@@ -1,5 +1,15 @@
 <meow>🐱</meow>
 
-<script>
-console.log("挂载成功 🐱")
+<script lang="ts">
+interface Meow {
+   name: string,
+   nickname: string  
+} 
+
+const cat:Meow = {
+    name: "小苗",
+    nickname: "呆猫"
+}
+
+console.log(🐱, cat)
 </script>

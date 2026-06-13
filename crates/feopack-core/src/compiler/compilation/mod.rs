@@ -5,6 +5,8 @@ mod seal;
 
 use crate::loader::text_loader::text_loader;
 use crate::loader::meow_loader_v1::meow_loader_v1;
+use crate::loader::meow_loader_v2::meow_loader_v2;
+use crate::loader::typescript_loader::typescript_loader;
 use crate::loader::{LoaderRegistry, LoaderRule};
 use crate::module_graph::ModuleGraph;
 use std::collections::HashMap;
@@ -75,7 +77,8 @@ impl Compilation {
 
     loader_registry.register_loader("text-loader".to_string(), text_loader);
     loader_registry.register_loader("meow-loader-v1".to_string(), meow_loader_v1);
-    
+    loader_registry.register_loader("meow-loader-v2".to_string(), meow_loader_v2);
+    loader_registry.register_loader("typescript-loader".to_string(), typescript_loader);
 
     loader_registry.add_rule(LoaderRule {
       test: ".txt".to_string(),
@@ -84,6 +87,20 @@ impl Compilation {
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v1".to_string(),
       used_loaders: vec!["meow-loader-v1".to_string()],
+    });
+
+
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v2".to_string(),
+      used_loaders: vec!["meow-loader-v2".to_string()],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".js".to_string(),
+      used_loaders: vec!["meow-loader-v2".to_string()],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".ts".to_string(),
+      used_loaders: vec!["typescript-loader".to_string()],
     });
 
 

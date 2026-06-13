@@ -3,7 +3,7 @@
 // /** @type { import('@feopack/core').FeopackOptions } */
 module.exports = {
     context: __dirname,
-    entry: "./src/index.js",
+    entry: "./src/index.ts",
     mode: "development",
     output: {
       path: __dirname + "/dist",
