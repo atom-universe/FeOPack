@@ -1,4 +1,5 @@
 use super::{CodegenModule, Compilation, GeneratedAsset, ResolvedPath};
+use crate::loader::inline_request;
 use crate::swc_compiler::{RawImportRecord, ResolvedImportRecord, SwcCompiler};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -57,8 +58,13 @@ impl Compilation {
     // 这里并不是重新 build module，而是消费 make 阶段缓存下来的 transformed source。
     // 目前为了复用 SWC transform，仍然会 source -> ast -> source 走一遍；
     // 后续如果把 AST/BuildResult 存进 Module，就可以继续减少重复 parse。
-    let module_path =
-      PathBuf::from(module_id.split_once('?').map(|(p, _)| p).unwrap_or(module_id));
+    let inline = inline_request::parse_inline_request(module_id);
+    let resource_path = inline
+      .resource
+      .split_once('?')
+      .map(|(path, _)| path)
+      .unwrap_or(inline.resource.as_str());
+    let module_path = PathBuf::from(resource_path);
     let ast: Program = compiler.parse_js(module_path, source)?;
     let raw_imports = compiler.collect_imports(&ast)?;
     let imports = self.resolve_imports(module_id, raw_imports)?;
@@ -154,8 +160,13 @@ __feopack_import__("{}");
     raw_imports: Vec<RawImportRecord>,
   ) -> Result<Vec<ResolvedImportRecord>, String> {
     let context = Path::new(&self.options.context);
-    let module_path =
-      PathBuf::from(module_id.split_once('?').map(|(p, _)| p).unwrap_or(module_id));
+    let inline = inline_request::parse_inline_request(module_id);
+    let resource_path = inline
+      .resource
+      .split_once('?')
+      .map(|(path, _)| path)
+      .unwrap_or(inline.resource.as_str());
+    let module_path = PathBuf::from(resource_path);
     let module_dir = module_path
       .parent()
       .ok_or_else(|| format!("无法获取模块目录: {}", module_id))?;

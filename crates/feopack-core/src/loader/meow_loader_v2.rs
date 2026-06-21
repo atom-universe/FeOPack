@@ -81,6 +81,7 @@ fn find_opening_tag(source: &str, tag_name: &str) -> Option<(HashMap<String, Str
 }
 
 /// 检测 .meow-v2 里有哪些块及其属性
+/// （另外，才发现 rust 的 doc 语法竟然是这样的
 pub fn detect_blocks(source: &str) -> Vec<MeowBlock> {
   let mut blocks = Vec::new();
 
@@ -112,14 +113,36 @@ pub fn detect_blocks(source: &str) -> Vec<MeowBlock> {
   blocks
 }
 
-/// 为每个块生成带 query 的 import 行
+/// 为每个块生成带 inline loader 的 import 行
+/// 
+pub fn block_inline_loaders(block: &MeowBlock) -> &'static str {
+  match block.block_type {
+    // type=script&lang=ts
+    "script" if block.attrs.get("lang").map(|s| s.as_str()) == Some("ts") => {
+      "meow-wrap-script-export!typescript-loader!meow-extract-script"
+    }
+    // type=script&lang=js
+    "script" => "meow-wrap-script-export!meow-extract-script",
+    // type=template
+    "template" => "meow-wrap-template-export!meow-extract-template",
+    // type=style&scoped
+    "style" if block.attrs.contains_key("scoped") => {
+      "meow-wrap-style-export!meow-scope-style!meow-extract-style"
+    }
+    // type=style
+    "style" => "meow-wrap-style-export!meow-extract-style",
+    _ => "",
+  }
+}
+
 pub fn generate_virtual_import_lines(file_name: &str, blocks: &[MeowBlock]) -> Vec<String> {
   blocks
     .iter()
     .map(|block| {
       format!(
-        "import __{}__ from './{file_name}{}';",
+        "import __{}__ from '-!{}!./{file_name}{}';",
         block.block_type,
+        block_inline_loaders(block),
         block.build_query()
       )
     })
@@ -174,7 +197,7 @@ pub fn meow_loader_v2_main(context: LoaderContext) -> Result<String, String> {
     .ok_or_else(|| "invalid resource path".to_string())?;
 
   let mut blocks = detect_blocks(&context.source);
-  // 一个小细节就是，这里得先处理好 style，再去出炉 template
+  // 一个小细节就是，这里得先处理好 style，再去处理 template
   // 否则后续做热更新的时候就会有一些问题
   blocks.sort_by_key(|block| match block.block_type {
     "style" => 0,

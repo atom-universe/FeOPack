@@ -1,4 +1,5 @@
 use super::{Compilation, ResolvedPath};
+use crate::loader::inline_request;
 use crate::module_graph::Module;
 use crate::swc_compiler::SwcCompiler;
 use std::collections::{HashSet, VecDeque};
@@ -47,13 +48,17 @@ impl Compilation {
 
   async fn build_module(&mut self, module_id: String) -> Result<Vec<String>, String> {
     let context = Path::new(&self.options.context);
-    let (module_resource_path,query) = module_id
-    .split_once('?')
-    .map(|(p, q)| (p, format!("?{}", q)))
-    .unwrap_or_else(|| (module_id.as_str(), String::new()));
+    let inline = inline_request::parse_inline_request(&module_id);
+    let (module_resource_path, query) = inline
+      .resource
+      .split_once('?')
+      .map(|(p, q)| (p, format!("?{}", q)))
+      .unwrap_or_else(|| (inline.resource.as_str(), String::new()));
 
     let module_path = PathBuf::from(module_resource_path);
-    let source = self.load_module_source(&module_path, &query).await?;
+    let source = self
+      .load_module_source(&module_path, &query, &inline)
+      .await?;
 
     // 这里每次 build module 都临时创建 SwcCompiler。
     // 当初是为了快速绕开 source_map/引用生命周期问题；坏处是暂时共享不了 sourcemap。
@@ -97,13 +102,21 @@ impl Compilation {
     Ok(dep_module_paths)
   }
 
-  async fn load_module_source(&self, module_path: &PathBuf, query: &str) -> Result<String, String> {
+  async fn load_module_source(
+    &self,
+    module_path: &PathBuf,
+    query: &str,
+    inline: &inline_request::InlineRequest,
+  ) -> Result<String, String> {
     let source = read_to_string(module_path)
       .await
       .map_err(|e| format!("读取模块文件失败 {:?}: {}", module_path, e))?;
 
-    // println!("========\nmodule_path: {:?}\n", module_path);
-    // 一个思考是：
-    self.loader_registry.run(module_path.clone(), query.to_string(), source)
+    self.loader_registry.run(
+      module_path.clone(),
+      query.to_string(),
+      source,
+      inline,
+    )
   }
 }
