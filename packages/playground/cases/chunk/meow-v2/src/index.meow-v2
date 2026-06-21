@@ -1,4 +1,4 @@
-<meow>🐱 V2</meow>
+<meow><span class="meow-title">🐱 V2</span></meow>
 
 <script lang="ts">
 interface Meow {
@@ -13,3 +13,11 @@ const cat:Meow = {
 
 console.log('🐱', cat)
 </script>
+
+<style scoped>
+.meow-title {
+  color: coral;
+  font-size: 24px;
+  background: pink;
+}
+</style>

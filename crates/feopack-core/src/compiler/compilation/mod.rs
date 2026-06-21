@@ -6,8 +6,8 @@ mod seal;
 use crate::loader::text_loader::text_loader;
 use crate::loader::meow_loader_v1::meow_loader_v1;
 use crate::loader::meow_loader_v2::{
-  meow_extract_script, meow_extract_template, meow_loader_v2_main, meow_wrap_script_export,
-  meow_wrap_template_export,
+  meow_extract_script, meow_extract_style, meow_extract_template, meow_loader_v2_main,
+  meow_scope_style, meow_wrap_script_export, meow_wrap_style_export, meow_wrap_template_export,
 };
 use crate::loader::typescript_loader::typescript_loader;
 use crate::loader::{LoaderRegistry, LoaderRule};
@@ -104,6 +104,12 @@ impl Compilation {
       "meow-wrap-script-export".to_string(),
       meow_wrap_script_export,
     );
+    loader_registry.register_loader("meow-extract-style".to_string(), meow_extract_style);
+    loader_registry.register_loader("meow-scope-style".to_string(), meow_scope_style);
+    loader_registry.register_loader(
+      "meow-wrap-style-export".to_string(),
+      meow_wrap_style_export,
+    );
     loader_registry.register_loader("typescript-loader".to_string(), typescript_loader);
 
     loader_registry.add_rule(LoaderRule {
@@ -120,11 +126,36 @@ impl Compilation {
     // TODO: 后续完成 pitcher 机制后，能够让这部分注册变得更加简单
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v2".to_string(),
-      resource_query: "?type=script".to_string(),
+      resource_query: "?type=script&lang=ts".to_string(),
       used_loaders: vec![
         "meow-wrap-script-export".to_string(),
         "typescript-loader".to_string(),
         "meow-extract-script".to_string(),
+      ],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v2".to_string(),
+      resource_query: "?type=script&lang=js".to_string(),
+      used_loaders: vec![
+        "meow-wrap-script-export".to_string(),
+        "meow-extract-script".to_string(),
+      ],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v2".to_string(),
+      resource_query: "?type=style&scoped".to_string(),
+      used_loaders: vec![
+        "meow-wrap-style-export".to_string(),
+        "meow-scope-style".to_string(),
+        "meow-extract-style".to_string(),
+      ],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v2".to_string(),
+      resource_query: "?type=style".to_string(),
+      used_loaders: vec![
+        "meow-wrap-style-export".to_string(),
+        "meow-extract-style".to_string(),
       ],
     });
     loader_registry.add_rule(LoaderRule {
