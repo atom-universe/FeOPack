@@ -20,6 +20,8 @@ pub struct LoaderRule {
 
 #[derive(Debug)]
 pub struct LoaderContext {
+  // 这里是一个很讲究的小巧思，resource 偏向于指的文件路径等
+  // 而 source 则侧重指文件的内容
   pub resource_path: PathBuf,
   pub source: String,
   // import xx from 'xx.vue'
@@ -27,7 +29,7 @@ pub struct LoaderContext {
   // import xx from 'xx.vue?type=template'
   // import xx from 'xx.vue?type=script'
   // import xx from 'xx.vue?type=style'
-  // pub resource_query: String,
+  pub resource_query: String,
 }
 
 pub type LoaderFn = fn(LoaderContext) -> Result<String, String>;
@@ -59,7 +61,7 @@ impl LoaderRegistry {
   // 1. 遍历资源路径，然后用后缀去匹配 rule.test
   // 2. 如果匹配到，则使用 rule.use_loader 中的 loader 进行处理
   // 3. 如果没匹配到，就直接返回原始文件的内容，不做处理
-  pub fn run(&self, resource_path: PathBuf, source: String) -> Result<String, String> {
+  pub fn run(&self, resource_path: PathBuf, resource_query: String, source: String) -> Result<String, String> {
     let Some(rule) = self.rules.iter().find(|rule| {
       resource_path
         .extension()
@@ -82,6 +84,7 @@ impl LoaderRegistry {
       // loader 的其实就是输入文件内容+路径，输出新的文件内容，仅此而已。。。
       cur_source = loader(LoaderContext {
         resource_path: resource_path.clone(),
+        resource_query: resource_query.to_string(),
         source: cur_source,
       })?;
     }

@@ -54,9 +54,22 @@ pub(crate) struct CodegenModule {
 
 #[derive(Debug, Clone)]
 pub(crate) enum ResolvedPath {
-  File(PathBuf),
+  // File(PathBuf),
+  File(ResolvedModule),
   External(String),
 }
+
+// PathBuf 逐渐不够用了，改造成 RsolvedModule
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedModule {
+  // 也就是 /abs/xxx?yyy=123 这样的内容
+  pub module_id: String,
+  // /abs/xxx
+  pub resource_path: PathBuf,
+  // ?yyy=123
+  pub resource_query: String,
+}
+
 
 #[derive(Debug)]
 pub struct Compilation {
@@ -88,8 +101,6 @@ impl Compilation {
       test: ".meow-v1".to_string(),
       used_loaders: vec!["meow-loader-v1".to_string()],
     });
-
-
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v2".to_string(),
       used_loaders: vec!["meow-loader-v2".to_string()],
@@ -102,7 +113,6 @@ impl Compilation {
       test: ".ts".to_string(),
       used_loaders: vec!["typescript-loader".to_string()],
     });
-
 
     Self {
       options: options.clone(),

@@ -1,4 +1,4 @@
-<meow>🐱</meow>
+<meow>🐱 V2</meow>
 
 <script lang="ts">
 interface Meow {

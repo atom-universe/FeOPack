@@ -1,3 +1,5 @@
+use crate::compilation::ResolvedModule;
+
 use super::{Compilation, ResolvedPath};
 use std::path::{Path, PathBuf};
 
@@ -16,6 +18,7 @@ impl Compilation {
     Ok(normalized)
   }
 
+  // TODO: 在这里处理 query
   pub(crate) fn resolve_path(
     dep: &str,
     module_dir: &Path,
@@ -27,11 +30,18 @@ impl Compilation {
       return Ok(ResolvedPath::External(dep.to_string()));
     }
 
+    // 拆分下虚拟请求
+    let (request_path, query) = dep
+    .split_once('?')
+    .map(|(p, q)| (p, format!("?{}", q)))
+    .unwrap_or((dep, String::new()));
+    println!("========\nrequest_path: {:?} \nquery: {:?}\n", request_path, query);
     // 如果依赖路径以 . 或 .. 开头，相对于当前模块目录解析。
-    let dep_path = module_dir.join(dep);
+    let dep_path = module_dir.join(request_path);
     let normalized = Self::normalize_path(&dep_path)?;
-
-    let final_path = if !normalized.exists() && normalized.extension().is_none() {
+ 
+    // 处理扩展名，如果没有扩展名，就用 .js
+    let resource_path = if !normalized.exists() && normalized.extension().is_none() {
       let dep_path_with_js = normalized.with_extension("js");
       if dep_path_with_js.exists() {
         dep_path_with_js
@@ -42,7 +52,11 @@ impl Compilation {
       normalized
     };
 
-    Ok(ResolvedPath::File(final_path))
+    Ok(ResolvedPath::File(ResolvedModule {
+      module_id: Self::create_module_id(&resource_path)?,
+      resource_path,
+      resource_query: query,
+    }))
   }
 
   pub fn is_external_request(request: &str) -> bool {

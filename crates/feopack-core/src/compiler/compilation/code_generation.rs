@@ -164,7 +164,7 @@ __feopack_import__("{}");
       let resolved_path = Self::resolve_path(&raw_import.request, module_dir, context)?;
       let external = matches!(resolved_path, ResolvedPath::External(_));
       let dep_module_id = match resolved_path {
-        ResolvedPath::File(dep_path) => Self::create_module_id(&dep_path)?,
+        ResolvedPath::File(resolved_module) => resolved_module.module_id,
         ResolvedPath::External(module_id) => module_id,
       };
 

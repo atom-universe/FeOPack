@@ -45,7 +45,6 @@ const __feopack_meow_loader__ = () => {{
   const script = document.createElement("script");
   script.textContent={:?};
   document.body.appendChild(script);
-    
 }};
 export {{ __feopack_meow_loader__ as default }};"#,
   handled_template,
