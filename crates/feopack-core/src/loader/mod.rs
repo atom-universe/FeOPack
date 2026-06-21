@@ -15,6 +15,7 @@ pub mod typescript_loader;
 #[derive(Debug)]
 pub struct LoaderRule {
   pub test: String,
+  pub resource_query: String,
   pub used_loaders: Vec<String>,
 }
 
@@ -58,15 +59,17 @@ impl LoaderRegistry {
     self.rules.push(rule);
   }
 
-  // 1. 遍历资源路径，然后用后缀去匹配 rule.test
-  // 2. 如果匹配到，则使用 rule.use_loader 中的 loader 进行处理
+  // 1. 遍历资源路径，用后缀 + resource_query 匹配 rule
+  // 2. 如果匹配到，则使用 rule.used_loaders 中的 loader 进行处理
   // 3. 如果没匹配到，就直接返回原始文件的内容，不做处理
   pub fn run(&self, resource_path: PathBuf, resource_query: String, source: String) -> Result<String, String> {
     let Some(rule) = self.rules.iter().find(|rule| {
       resource_path
         .extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| rule.test.trim_start_matches('.') == ext)
+        .map(|ext| {
+          rule.test.trim_start_matches('.') == ext && rule.resource_query == resource_query
+        })
         .unwrap_or(false)
     }) else {
       return Ok(source);

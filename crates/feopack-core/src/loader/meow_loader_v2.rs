@@ -32,19 +32,81 @@ pub fn generate_virtual_import_lines(file_name: &str, blocks: &[&str]) -> Vec<St
     .collect()
 }
 
-pub fn meow_loader_v2(context: LoaderContext) -> Result<String, String> {
+// 拆分1
+pub fn extract_template(source: &str) -> Result<String, String> {
+  let start = source.find("<meow>").ok_or_else(|| "missing <meow> tag".to_string())?;
+  let end = source
+    .find("</meow>")
+    .ok_or_else(|| "missing </meow> tag".to_string())?;
+  Ok(source[start + "<meow>".len()..end].trim().to_string())
+}
+
+// 拆分2
+pub fn extract_script(source: &str) -> Result<String, String> {
+  let start_tag = source
+    .find("<script")
+    .ok_or_else(|| "missing <script> tag".to_string())?;
+  // TODO: 兼容下一些标签属性
+  let content_start = source[start_tag..]
+    .find('>')
+    .map(|index| start_tag + index + 1)
+    .ok_or_else(|| "malformed <script> tag".to_string())?;
+  let end = source
+    .find("</script>")
+    .ok_or_else(|| "missing </script> tag".to_string())?;
+  Ok(source[content_start..end].trim().to_string())
+}
+
+/// 主请求：生成 virtual import 并组装 default export
+pub fn meow_loader_v2_main(context: LoaderContext) -> Result<String, String> {
   let file_name = context
     .resource_path
     .file_name()
     .and_then(|name| name.to_str())
     .ok_or_else(|| "invalid resource path".to_string())?;
 
-  println!("\n========\ncontext: {:?}\n", context);
-
   let blocks = detect_blocks(&context.source);
-  println!("========\nblocks: {:?}\n", blocks);
   let virtual_imports = generate_virtual_import_lines(file_name, &blocks);
-  println!("========\nvirtual_imports: {:?}\n", virtual_imports);
-  // 暂时先原样吐出 virtual import，下一步再接 resolver + 子 loader
-  Ok(virtual_imports.join("\n"))
+
+  Ok(format!(
+    r#"{imports}
+function meow() {{
+  {calls}
+}}
+export {{ meow as default }};"#,
+    imports = virtual_imports.join("\n"),
+    calls = blocks
+      .iter()
+      .map(|block| format!("__{block}__();"))
+      .collect::<Vec<_>>()
+      .join("\n  ")
+  ))
+}
+
+pub fn meow_extract_template(context: LoaderContext) -> Result<String, String> {
+  extract_template(&context.source)
+}
+
+pub fn meow_extract_script(context: LoaderContext) -> Result<String, String> {
+  extract_script(&context.source)
+}
+
+pub fn meow_wrap_template_export(context: LoaderContext) -> Result<String, String> {
+  Ok(format!(
+    r#"function __meow_template__() {{
+  const element = document.getElementById('meow');
+  if (element) {{
+    element.innerHTML = {html:?};
+  }}
+}}
+export {{ __meow_template__ as default }};"#,
+    html = context.source.trim()
+  ))
+}
+
+pub fn meow_wrap_script_export(context: LoaderContext) -> Result<String, String> {
+  Ok(format!(
+    "function __meow_script__() {{\n{}\n}}\nexport {{ __meow_script__ as default }};",
+    context.source.trim()
+  ))
 }

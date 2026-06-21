@@ -1,5 +1,4 @@
 use super::{Compilation, ResolvedPath};
-use crate::compilation::ResolvedModule;
 use crate::module_graph::Module;
 use crate::swc_compiler::SwcCompiler;
 use std::collections::{HashSet, VecDeque};
@@ -88,7 +87,6 @@ impl Compilation {
       }
     }
 
-    let module_id = Self::create_module_id(&module_path)?;
     // loader 已经在 make 阶段执行过，这里保存 transformed source。
     // code_generation 后续只消费这个 build result，不再重新读文件或重新跑 loader。
     self.module_sources.insert(module_id.clone(), source);

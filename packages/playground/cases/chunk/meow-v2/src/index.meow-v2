@@ -11,5 +11,5 @@ const cat:Meow = {
     nickname: "呆猫"
 }
 
-console.log(🐱, cat)
+console.log('🐱', cat)
 </script>

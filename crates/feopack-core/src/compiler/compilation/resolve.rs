@@ -53,7 +53,7 @@ impl Compilation {
     };
 
     Ok(ResolvedPath::File(ResolvedModule {
-      module_id: Self::create_module_id(&resource_path)?,
+      module_id: format!("{}{}", Self::create_module_id(&resource_path)?, query),
       resource_path,
       resource_query: query,
     }))
