@@ -271,6 +271,7 @@ export {{ __meow_style__ as default }};"#,
   ))
 }
 
+// rust 竟然有这种好东西，写在文件内部的单元测试，太方便了
 #[cfg(test)]
 mod tests {
   use super::*;

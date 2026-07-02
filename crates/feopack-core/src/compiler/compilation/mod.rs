@@ -9,8 +9,9 @@ use crate::loader::meow_loader_v2::{
   meow_extract_script, meow_extract_style, meow_extract_template, meow_loader_v2_main,
   meow_scope_style, meow_wrap_script_export, meow_wrap_style_export, meow_wrap_template_export,
 };
+use crate::loader::meow_loader_v3::{meow_loader_v3_main, meow_v3_pitch, meow_v3_pitcher_normal};
 use crate::loader::typescript_loader::typescript_loader;
-use crate::loader::{LoaderRegistry, LoaderRule};
+use crate::loader::{Loader, LoaderRegistry, LoaderRule};
 use crate::loader::inline_request::InlineRequest;
 use crate::module_graph::ModuleGraph;
 use std::collections::HashMap;
@@ -93,26 +94,85 @@ impl Compilation {
     println!("\n\nCompilation new: {:?}\n\n", options);
     let mut loader_registry = LoaderRegistry::new();
 
-    loader_registry.register_loader("text-loader".to_string(), text_loader);
-    loader_registry.register_loader("meow-loader-v1".to_string(), meow_loader_v1);
-    loader_registry.register_loader("meow-loader-v2-main".to_string(), meow_loader_v2_main);
-    loader_registry.register_loader("meow-extract-template".to_string(), meow_extract_template);
-    loader_registry.register_loader("meow-extract-script".to_string(), meow_extract_script);
+    loader_registry.register_loader("text-loader".to_string(), Loader::normal_only(text_loader));
+    loader_registry.register_loader(
+      "meow-loader-v1".to_string(),
+      Loader::normal_only(meow_loader_v1),
+    );
+    loader_registry.register_loader(
+      "meow-loader-v2-main".to_string(),
+      Loader::normal_only(meow_loader_v2_main),
+    );
+    loader_registry.register_loader(
+      "meow-extract-template".to_string(),
+      Loader::normal_only(meow_extract_template),
+    );
+    loader_registry.register_loader(
+      "meow-extract-script".to_string(),
+      Loader::normal_only(meow_extract_script),
+    );
     loader_registry.register_loader(
       "meow-wrap-template-export".to_string(),
-      meow_wrap_template_export,
+      Loader::normal_only(meow_wrap_template_export),
     );
     loader_registry.register_loader(
       "meow-wrap-script-export".to_string(),
-      meow_wrap_script_export,
+      Loader::normal_only(meow_wrap_script_export),
     );
-    loader_registry.register_loader("meow-extract-style".to_string(), meow_extract_style);
-    loader_registry.register_loader("meow-scope-style".to_string(), meow_scope_style);
+    loader_registry.register_loader(
+      "meow-extract-style".to_string(),
+      Loader::normal_only(meow_extract_style),
+    );
+    loader_registry.register_loader(
+      "meow-scope-style".to_string(),
+      Loader::normal_only(meow_scope_style),
+    );
     loader_registry.register_loader(
       "meow-wrap-style-export".to_string(),
-      meow_wrap_style_export,
+      Loader::normal_only(meow_wrap_style_export),
     );
-    loader_registry.register_loader("typescript-loader".to_string(), typescript_loader);
+    loader_registry.register_loader(
+      "typescript-loader".to_string(),
+      Loader::normal_only(typescript_loader),
+    );
+
+    // meow-v3：pitch + resourceQuery rule（子 block 不再写 inline loader 链）
+    loader_registry.register_loader(
+      "meow-v3-pitcher".to_string(),
+      Loader::with_pitch(meow_v3_pitch, meow_v3_pitcher_normal),
+    );
+    loader_registry.register_loader(
+      "meow-loader-v3-main".to_string(),
+      Loader::normal_only(meow_loader_v3_main),
+    );
+    loader_registry.register_loader(
+      "meow-v3-extract-template".to_string(),
+      Loader::normal_only(meow_extract_template),
+    );
+    loader_registry.register_loader(
+      "meow-v3-extract-script".to_string(),
+      Loader::normal_only(meow_extract_script),
+    );
+    loader_registry.register_loader(
+      "meow-v3-extract-style".to_string(),
+      Loader::normal_only(meow_extract_style),
+    );
+    loader_registry.register_loader(
+      "meow-v3-scope-style".to_string(),
+      Loader::normal_only(meow_scope_style),
+    );
+    loader_registry.register_loader(
+      "meow-v3-wrap-template-export".to_string(),
+      Loader::normal_only(meow_wrap_template_export),
+    );
+    loader_registry.register_loader(
+      "meow-v3-wrap-script-export".to_string(),
+      Loader::normal_only(meow_wrap_script_export),
+    );
+    loader_registry.register_loader(
+      "meow-v3-wrap-style-export".to_string(),
+      Loader::normal_only(meow_wrap_style_export),
+    );
 
     loader_registry.add_rule(LoaderRule {
       test: ".txt".to_string(),
@@ -182,6 +242,64 @@ impl Compilation {
       resource_query: String::new(),
       used_loaders: vec!["meow-loader-v2-main".to_string()],
     });
+
+    // meow-v3：pitch 认 query + rule 配 loader 链（对比 v2 的 inline import 方案）
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v3".to_string(),
+      resource_query: String::new(),
+      used_loaders: vec![
+        "meow-v3-pitcher".to_string(),
+        "meow-loader-v3-main".to_string(),
+      ],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v3".to_string(),
+      resource_query: "?type=script&lang=ts".to_string(),
+      used_loaders: vec![
+        "meow-v3-pitcher".to_string(),
+        "meow-v3-wrap-script-export".to_string(),
+        "typescript-loader".to_string(),
+        "meow-v3-extract-script".to_string(),
+      ],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v3".to_string(),
+      resource_query: "?type=script&lang=js".to_string(),
+      used_loaders: vec![
+        "meow-v3-pitcher".to_string(),
+        "meow-v3-wrap-script-export".to_string(),
+        "meow-v3-extract-script".to_string(),
+      ],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v3".to_string(),
+      resource_query: "?type=template".to_string(),
+      used_loaders: vec![
+        "meow-v3-pitcher".to_string(),
+        "meow-v3-wrap-template-export".to_string(),
+        "meow-v3-extract-template".to_string(),
+      ],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v3".to_string(),
+      resource_query: "?type=style&scoped".to_string(),
+      used_loaders: vec![
+        "meow-v3-pitcher".to_string(),
+        "meow-v3-wrap-style-export".to_string(),
+        "meow-v3-scope-style".to_string(),
+        "meow-v3-extract-style".to_string(),
+      ],
+    });
+    loader_registry.add_rule(LoaderRule {
+      test: ".meow-v3".to_string(),
+      resource_query: "?type=style".to_string(),
+      used_loaders: vec![
+        "meow-v3-pitcher".to_string(),
+        "meow-v3-wrap-style-export".to_string(),
+        "meow-v3-extract-style".to_string(),
+      ],
+    });
+
     loader_registry.add_rule(LoaderRule {
       test: ".ts".to_string(),
       resource_query: String::new(),

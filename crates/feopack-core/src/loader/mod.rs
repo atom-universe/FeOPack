@@ -7,6 +7,7 @@ use inline_request::InlineRequest;
 pub mod text_loader;
 pub mod meow_loader_v1;
 pub mod meow_loader_v2;
+pub mod meow_loader_v3;
 pub mod typescript_loader;
 pub mod inline_request;
 
@@ -22,7 +23,7 @@ pub struct LoaderRule {
   pub used_loaders: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LoaderContext {
   // 这里是一个很讲究的小巧思，resource 偏向于指的文件路径等
   // 而 source 则侧重指文件的内容
@@ -36,11 +37,42 @@ pub struct LoaderContext {
   pub resource_query: String,
 }
 
-pub type LoaderFn = fn(LoaderContext) -> Result<String, String>;
+pub type NormalFn = fn(LoaderContext) -> Result<String, String>;
+pub type PitchFn = fn(&LoaderContext) -> Result<PitchResult, String>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PitchResult {
+  /// 等同 webpack pitch 返回 undefined：继续后续 pitch，并在需要时读盘
+  Continue,
+  /// 等同 pitch 返回 string：短路，跳过读盘与剩余 pitch
+  ShortCircuit(String),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Loader {
+  pub pitch: Option<PitchFn>,
+  pub normal: NormalFn,
+}
+
+impl Loader {
+  pub fn normal_only(normal: NormalFn) -> Self {
+    Self {
+      pitch: None,
+      normal,
+    }
+  }
+
+  pub fn with_pitch(pitch: PitchFn, normal: NormalFn) -> Self {
+    Self {
+      pitch: Some(pitch),
+      normal,
+    }
+  }
+}
 
 #[derive(Debug)]
 pub struct LoaderRegistry {
-  loaders: HashMap<String, LoaderFn>,
+  loaders: HashMap<String, Loader>,
   rules: Vec<LoaderRule>,
 }
 
@@ -52,9 +84,7 @@ impl LoaderRegistry {
     }
   }
 
-  // loader 注册也是一个比较简单的事情，也就是给 loader 一个名字，然后把具体的处理函数注册进 map
-  // 这个方法的意义就是注册内置的 loader （毕竟用户没地方输入这种配置，得内部完成）
-  pub fn register_loader(&mut self, name: String, loader: LoaderFn) {
+  pub fn register_loader(&mut self, name: String, loader: Loader) {
     self.loaders.insert(name.to_string(), loader);
   }
 
@@ -62,18 +92,13 @@ impl LoaderRegistry {
     self.rules.push(rule);
   }
 
-  // 1. 有 inline loader 时优先拼进执行链
-  // 2. `-!` 表示只跑 inline loader，跳过 rule 匹配
-  // 3. 否则再按后缀 + resource_query 匹配 rule
-  pub fn run(
+  pub fn resolve_chain(
     &self,
-    resource_path: PathBuf,
-    resource_query: String,
-    source: String,
+    resource_path: &PathBuf,
+    resource_query: &str,
     inline: &InlineRequest,
-  ) -> Result<String, String> {
-    let mut cur_source = source;
-    // loader chain 到底解决什么问题呢？（可以参考 crates/feopack-core/src/compiler/compilation/mod.rs 的注释）
+  ) -> Vec<String> {
+        // loader chain 到底解决什么问题呢？（可以参考 crates/feopack-core/src/compiler/compilation/mod.rs 的注释）
     // meow-loader-v2 这种 loader 会产生 virtual requests, 可能需要多类 loader 来处理
     // 本来是需要手动为每种情况制定 loader 的配方（我的老天，我认为这真是一个绝妙的描述💗 
     // 而 loader chain 要做的就是，根据 virtual request 的情况，自动编排 loader 的配方
@@ -132,24 +157,180 @@ impl LoaderRegistry {
       }
     }
 
-    if loader_chain.is_empty() {
-      return Ok(cur_source);
+    loader_chain
+  }
+
+  /// pitch 阶段：从左到右；若某个 pitch 返回 ShortCircuit，则跳过后续 pitch 与读盘
+  pub fn run_pitch(
+    &self,
+    context: &LoaderContext,
+    loader_chain: &[String],
+  ) -> Result<Option<String>, String> {
+    for loader_name in loader_chain {
+      let Some(pitch) = self
+        .loaders
+        .get(loader_name)
+        .and_then(|loader| loader.pitch)
+      else {
+        continue;
+      };
+
+      match pitch(context)? {
+        PitchResult::Continue => {}
+        PitchResult::ShortCircuit(source) => return Ok(Some(source)),
+      }
     }
 
-    // rev 颠倒一下顺序，这样让用户感知到的 loader 是从右往左执行，和 webpack 一致
+    Ok(None)
+  }
+
+  /// normal 阶段：从右到左 transform source
+  pub fn run_normal(
+    &self,
+    context: LoaderContext,
+    loader_chain: &[String],
+    source: String,
+  ) -> Result<String, String> {
+    if loader_chain.is_empty() {
+      return Ok(source);
+    }
+
+    let mut cur_source = source;
+
     for loader_name in loader_chain.iter().rev() {
       let loader = self
         .loaders
         .get(loader_name)
         .ok_or_else(|| format!("找不到 loader: {}", loader_name))?;
 
-      cur_source = loader(LoaderContext {
-        resource_path: resource_path.clone(),
-        resource_query: resource_query.clone(),
+      cur_source = (loader.normal)(LoaderContext {
+        resource_path: context.resource_path.clone(),
+        resource_query: context.resource_query.clone(),
         source: cur_source,
       })?;
     }
 
     Ok(cur_source)
+  }
+
+  /// pitch →（必要时读盘）→ normal
+  pub fn run(
+    &self,
+    resource_path: PathBuf,
+    resource_query: String,
+    source: String,
+    inline: &InlineRequest,
+  ) -> Result<String, String> {
+    let loader_chain = self.resolve_chain(&resource_path, &resource_query, inline);
+
+    let pitch_context = LoaderContext {
+      resource_path: resource_path.clone(),
+      resource_query: resource_query.clone(),
+      source: String::new(),
+    };
+
+    let initial_source = if let Some(pitched_source) = self.run_pitch(&pitch_context, &loader_chain)? {
+      pitched_source
+    } else {
+      source
+    };
+
+    self.run_normal(
+      LoaderContext {
+        resource_path,
+        resource_query,
+        source: String::new(),
+      },
+      &loader_chain,
+      initial_source,
+    )
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::sync::atomic::{AtomicUsize, Ordering};
+
+  static PITCH_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+  fn counting_pitch(_ctx: &LoaderContext) -> Result<PitchResult, String> {
+    PITCH_CALLS.fetch_add(1, Ordering::SeqCst);
+    Ok(PitchResult::Continue)
+  }
+
+  fn short_circuit_pitch(_ctx: &LoaderContext) -> Result<PitchResult, String> {
+    Ok(PitchResult::ShortCircuit("from pitch".to_string()))
+  }
+
+  fn append_a(mut ctx: LoaderContext) -> Result<String, String> {
+    ctx.source.push('A');
+    Ok(ctx.source)
+  }
+
+  fn append_b(mut ctx: LoaderContext) -> Result<String, String> {
+    ctx.source.push('B');
+    Ok(ctx.source)
+  }
+
+  #[test]
+  fn pitch_runs_left_to_right_before_normal() {
+    PITCH_CALLS.store(0, Ordering::SeqCst);
+
+    let mut registry = LoaderRegistry::new();
+    registry.register_loader(
+      "pitcher".to_string(),
+      Loader::with_pitch(counting_pitch, append_a),
+    );
+    registry.register_loader("worker".to_string(), Loader::normal_only(append_b));
+    registry.add_rule(LoaderRule {
+      test: ".txt".to_string(),
+      resource_query: String::new(),
+      used_loaders: vec!["pitcher".to_string(), "worker".to_string()],
+    });
+
+    let inline = InlineRequest::default();
+    let output = registry
+      .run(
+        PathBuf::from("./demo.txt"),
+        String::new(),
+        "x".to_string(),
+        &inline,
+      )
+      .expect("loader run");
+
+    assert_eq!(PITCH_CALLS.load(Ordering::SeqCst), 1);
+    assert_eq!(output, "xBA");
+  }
+
+  fn pass_through(ctx: LoaderContext) -> Result<String, String> {
+    Ok(ctx.source)
+  }
+
+  #[test]
+  fn pitch_short_circuit_skips_initial_source() {
+    let mut registry = LoaderRegistry::new();
+    registry.register_loader(
+      "pitcher".to_string(),
+      Loader::with_pitch(short_circuit_pitch, pass_through),
+    );
+    registry.register_loader("worker".to_string(), Loader::normal_only(append_b));
+    registry.add_rule(LoaderRule {
+      test: ".txt".to_string(),
+      resource_query: String::new(),
+      used_loaders: vec!["pitcher".to_string(), "worker".to_string()],
+    });
+
+    let inline = InlineRequest::default();
+    let output = registry
+      .run(
+        PathBuf::from("./demo.txt"),
+        String::new(),
+        "ignored".to_string(),
+        &inline,
+      )
+      .expect("loader run");
+
+    assert_eq!(output, "from pitchB");
   }
 }

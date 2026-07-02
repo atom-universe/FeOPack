@@ -108,15 +108,32 @@ impl Compilation {
     query: &str,
     inline: &inline_request::InlineRequest,
   ) -> Result<String, String> {
-    let source = read_to_string(module_path)
-      .await
-      .map_err(|e| format!("读取模块文件失败 {:?}: {}", module_path, e))?;
+    let loader_chain = self.loader_registry.resolve_chain(module_path, query, inline);
+    let pitch_context = crate::loader::LoaderContext {
+      resource_path: module_path.clone(),
+      resource_query: query.to_string(),
+      source: String::new(),
+    };
 
-    self.loader_registry.run(
-      module_path.clone(),
-      query.to_string(),
+    let source = if let Some(pitched_source) = self
+      .loader_registry
+      .run_pitch(&pitch_context, &loader_chain)?
+    {
+      pitched_source
+    } else {
+      read_to_string(module_path)
+        .await
+        .map_err(|e| format!("读取模块文件失败 {:?}: {}", module_path, e))?
+    };
+
+    self.loader_registry.run_normal(
+      crate::loader::LoaderContext {
+        resource_path: module_path.clone(),
+        resource_query: query.to_string(),
+        source: String::new(),
+      },
+      &loader_chain,
       source,
-      inline,
     )
   }
 }
