@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use inline_request::InlineRequest;
+use meow_loader_v3::resolve_meow_v3_chain;
 
 pub mod text_loader;
 pub mod meow_loader_v1;
@@ -153,6 +154,18 @@ impl LoaderRegistry {
 
     if !inline.loaders.is_empty() {
       loader_chain.extend(inline.loaders.iter().cloned());
+    }
+
+    // meow-v3（vue-loader 风格）：用户只配一条 rule；子 block 链由 resource_query 在 loader 内拼出
+    if resource_path
+      .extension()
+      .and_then(|ext| ext.to_str())
+      .is_some_and(|ext| ext == "meow-v3")
+    {
+      if let Ok(v3_chain) = resolve_meow_v3_chain(resource_query) {
+        loader_chain.extend(v3_chain);
+      }
+      return loader_chain;
     }
 
     for enforce in [LoaderEnforce::Pre, LoaderEnforce::Normal, LoaderEnforce::Post] {

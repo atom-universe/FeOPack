@@ -1,21 +1,94 @@
-use crate::loader::meow_loader_v2::{detect_blocks, MeowBlock};
+use crate::loader::meow_loader_v2::{block_loader_names, block_inline_loaders, detect_blocks, MeowBlock};
 use crate::loader::{LoaderContext, PitchResult};
+use std::collections::HashMap;
 
-/// v3 pitcher：读盘前根据 resource_query 认路。
-///
-/// 与 v2 的区别：v2 把子 block 配方写在 inline import 里；v3 用 query + config rule，
-/// pitcher 在 pitch 阶段先跑，避免子 request 误命中主 SFC rule。
+const MEOW_V3_PITCHER: &str = "meow-v3-pitcher";
+const MEOW_V3_MAIN: &str = "meow-loader-v3-main";
+
+/// 把 `?type=script&lang=ts` 解析成 [`MeowBlock`]（对齐 vue-loader 的 resourceQuery 约定）
+pub fn meow_block_from_query(resource_query: &str) -> Result<MeowBlock, String> {
+  let query = resource_query
+    .strip_prefix('?')
+    .filter(|q| !q.is_empty())
+    .ok_or_else(|| format!("meow-v3: expected non-empty resource_query, got {resource_query:?}"))?;
+
+  let mut block_type: Option<&str> = None;
+  let mut attrs = HashMap::new();
+
+  for part in query.split('&') {
+    if part == "scoped" {
+      attrs.insert("scoped".to_string(), String::new());
+      continue;
+    }
+
+    let Some((key, value)) = part.split_once('=') else {
+      continue;
+    };
+
+    match key {
+      "type" => block_type = Some(value),
+      "lang" => {
+        attrs.insert("lang".to_string(), value.to_string());
+      }
+      _ => {}
+    }
+  }
+
+  let block_type = block_type.ok_or_else(|| format!("meow-v3: missing type= in query {resource_query}"))?;
+  let block_type = match block_type {
+    "script" => "script",
+    "template" => "template",
+    "style" => "style",
+    other => return Err(format!("meow-v3: unknown block type {other}")),
+  };
+
+  let block = MeowBlock {
+    block_type,
+    attrs,
+  };
+
+  println!("block: {:?}", block);
+// block: MeowBlock { block_type: "style", attrs: {"scoped": ""} }
+// block: MeowBlock { block_type: "style", attrs: {"scoped": ""} }
+// block: MeowBlock { block_type: "template", attrs: {} }
+// block: MeowBlock { block_type: "template", attrs: {} }
+// block: MeowBlock { block_type: "script", attrs: {"lang": "ts"} }
+// block: MeowBlock { block_type: "script", attrs: {"lang": "ts"} }
+
+  Ok(block)
+}
+
+/// vue-loader 风格：config 只配一条 rule；具体 loader 链由 `resource_query` 在 loader 内部决定
+pub fn resolve_meow_v3_chain(resource_query: &str) -> Result<Vec<String>, String> {
+  let mut chain = vec![MEOW_V3_PITCHER.to_string()];
+
+  if resource_query.is_empty() {
+    chain.push(MEOW_V3_MAIN.to_string());
+    return Ok(chain);
+  }
+
+  let block = meow_block_from_query(resource_query)?;
+  if block_inline_loaders(&block).is_empty() {
+    return Err(format!(
+      "meow-v3: no loader chain for query {resource_query}"
+    ));
+  }
+
+  chain.extend(
+    block_loader_names(&block)
+      .into_iter()
+      .map(|name| name.to_string()),
+  );
+  Ok(chain)
+}
+
+/// pitch：识别子 block 请求（类似 vue-loader 的 pitcher）；拼链见 [`resolve_meow_v3_chain`]
 pub fn meow_v3_pitch(context: &LoaderContext) -> Result<PitchResult, String> {
-  let query = context.resource_query.as_str();
-
-  if query.is_empty() {
+  if context.resource_query.is_empty() {
     return Ok(PitchResult::Continue);
   }
 
-  if !query.starts_with("?type=") {
-    return Err(format!("meow-v3-pitcher: 无法识别的 query: {query}"));
-  }
-
+  meow_block_from_query(&context.resource_query)?;
   Ok(PitchResult::Continue)
 }
 
@@ -32,7 +105,7 @@ pub fn generate_virtual_import_lines_v3(file_name: &str, blocks: &[MeowBlock]) -
     .collect()
 }
 
-/// 主请求：只生成 plain virtual import（无 inline loader 链）
+/// Main request: plain virtual imports (no inline chain in the import string).
 pub fn meow_loader_v3_main(context: LoaderContext) -> Result<String, String> {
   let file_name = context
     .resource_path
@@ -88,6 +161,40 @@ mod tests {
       assert!(!line.contains("meow-extract"));
       assert!(line.contains("./index.meow-v3?"));
     }
+  }
+
+  #[test]
+  fn v3_resolve_main_chain() {
+    let chain = resolve_meow_v3_chain("").unwrap();
+    assert_eq!(chain, vec![MEOW_V3_PITCHER, MEOW_V3_MAIN]);
+  }
+
+  #[test]
+  fn v3_resolve_script_ts_chain() {
+    let chain = resolve_meow_v3_chain("?type=script&lang=ts").unwrap();
+    assert_eq!(
+      chain,
+      vec![
+        MEOW_V3_PITCHER,
+        "meow-wrap-script-export",
+        "typescript-loader",
+        "meow-extract-script",
+      ]
+    );
+  }
+
+  #[test]
+  fn v3_resolve_style_scoped_chain() {
+    let chain = resolve_meow_v3_chain("?type=style&scoped").unwrap();
+    assert_eq!(
+      chain,
+      vec![
+        MEOW_V3_PITCHER,
+        "meow-wrap-style-export",
+        "meow-scope-style",
+        "meow-extract-style",
+      ]
+    );
   }
 
   #[test]

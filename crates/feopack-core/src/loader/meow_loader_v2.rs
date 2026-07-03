@@ -113,8 +113,15 @@ pub fn detect_blocks(source: &str) -> Vec<MeowBlock> {
   blocks
 }
 
+/// 把 `block_inline_loaders` 的 `!` 分隔串拆成链上 loader 名（从左到右书写顺序）
+pub fn block_loader_names(block: &MeowBlock) -> Vec<&'static str> {
+  block_inline_loaders(block)
+    .split('!')
+    .filter(|name| !name.is_empty())
+    .collect()
+}
+
 /// 为每个块生成带 inline loader 的 import 行
-/// 
 pub fn block_inline_loaders(block: &MeowBlock) -> &'static str {
   match block.block_type {
     // type=script&lang=ts

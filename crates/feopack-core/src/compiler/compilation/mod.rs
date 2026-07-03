@@ -221,66 +221,12 @@ impl Compilation {
       enforce: LoaderEnforce::Normal,
     });
 
-    // meow-v3：pitch 认 query + rule 配 loader 链（对比 v2 的 inline import 方案）
+    // meow-v3（vue-loader 风格）：拼链在 resolve_meow_v3_chain 里完成，不再为每种 query 写 rule
+    // 这里保留一条 .meow-v3 仅作占位/对照；实际匹配与拼链在 LoaderRegistry 里处理
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v3".to_string(),
       resource_query: String::new(),
-      used_loaders: vec![
-        "meow-v3-pitcher".to_string(),
-        "meow-loader-v3-main".to_string(),
-      ],
-      enforce: LoaderEnforce::Normal,
-    });
-    loader_registry.add_rule(LoaderRule {
-      test: ".meow-v3".to_string(),
-      resource_query: "?type=script&lang=ts".to_string(),
-      used_loaders: vec![
-        "meow-v3-pitcher".to_string(),
-        "meow-wrap-script-export".to_string(),
-        "typescript-loader".to_string(),
-        "meow-extract-script".to_string(),
-      ],
-      enforce: LoaderEnforce::Normal,
-    });
-    loader_registry.add_rule(LoaderRule {
-      test: ".meow-v3".to_string(),
-      resource_query: "?type=script&lang=js".to_string(),
-      used_loaders: vec![
-        "meow-v3-pitcher".to_string(),
-        "meow-wrap-script-export".to_string(),
-        "meow-extract-script".to_string(),
-      ],
-      enforce: LoaderEnforce::Normal,
-    });
-    loader_registry.add_rule(LoaderRule {
-      test: ".meow-v3".to_string(),
-      resource_query: "?type=template".to_string(),
-      used_loaders: vec![
-        "meow-v3-pitcher".to_string(),
-        "meow-wrap-template-export".to_string(),
-        "meow-extract-template".to_string(),
-      ],
-      enforce: LoaderEnforce::Normal,
-    });
-    loader_registry.add_rule(LoaderRule {
-      test: ".meow-v3".to_string(),
-      resource_query: "?type=style&scoped".to_string(),
-      used_loaders: vec![
-        "meow-v3-pitcher".to_string(),
-        "meow-wrap-style-export".to_string(),
-        "meow-scope-style".to_string(),
-        "meow-extract-style".to_string(),
-      ],
-      enforce: LoaderEnforce::Normal,
-    });
-    loader_registry.add_rule(LoaderRule {
-      test: ".meow-v3".to_string(),
-      resource_query: "?type=style".to_string(),
-      used_loaders: vec![
-        "meow-v3-pitcher".to_string(),
-        "meow-wrap-style-export".to_string(),
-        "meow-extract-style".to_string(),
-      ],
+      used_loaders: vec![],
       enforce: LoaderEnforce::Normal,
     });
 
