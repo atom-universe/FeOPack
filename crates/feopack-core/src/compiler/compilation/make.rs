@@ -108,6 +108,7 @@ impl Compilation {
     query: &str,
     inline: &inline_request::InlineRequest,
   ) -> Result<String, String> {
+    // pitch 阶段发生在读盘之前
     let loader_chain = self.loader_registry.resolve_chain(module_path, query, inline);
     let pitch_context = crate::loader::LoaderContext {
       resource_path: module_path.clone(),
