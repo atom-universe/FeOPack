@@ -1,7 +1,44 @@
+use super::LoaderEnforce;
+
+/// webpack 风格 inline request 前缀，控制 **config** 里哪些 enforce 档参与。
+///
+/// - `!`   → 跳过 config normal
+/// - `-!`  → 跳过 config pre + normal（post 仍可能参与）
+/// - `!!`  → 跳过 config pre + normal + post
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InlineConfigOverride {
+  #[default]
+  None,
+  SkipNormal,
+  SkipPreNormal,
+  SkipAllConfig,
+}
+
+impl InlineConfigOverride {
+  pub fn allows_config_rule(self, enforce: LoaderEnforce) -> bool {
+    match (self, enforce) {
+      (InlineConfigOverride::None, _) => true,
+      (InlineConfigOverride::SkipNormal, LoaderEnforce::Normal) => false,
+      (InlineConfigOverride::SkipNormal, _) => true,
+      (InlineConfigOverride::SkipPreNormal, LoaderEnforce::Post) => true,
+      (InlineConfigOverride::SkipPreNormal, _) => false,
+      (InlineConfigOverride::SkipAllConfig, _) => false,
+    }
+  }
+
+  pub fn prefix(self) -> &'static str {
+    match self {
+      InlineConfigOverride::None => "",
+      InlineConfigOverride::SkipNormal => "!",
+      InlineConfigOverride::SkipPreNormal => "-!",
+      InlineConfigOverride::SkipAllConfig => "!!",
+    }
+  }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InlineRequest {
-  /// `-!` / `!!` 前缀：只跑 inline loader，跳过 rule 匹配
-  pub inline_only: bool,
+  pub config_override: InlineConfigOverride,
   pub loaders: Vec<String>,
   pub resource: String,
 }
@@ -14,21 +51,21 @@ pub struct InlineRequest {
 /// - `-!meow-wrap-script-export!typescript-loader!meow-extract-script!./foo.meow-v2?type=script&lang=ts`
 pub fn parse_inline_request(request: &str) -> InlineRequest {
   let mut rest = request.trim();
-  let mut inline_only = false;
+  let mut config_override = InlineConfigOverride::None;
 
   loop {
     if let Some(stripped) = rest.strip_prefix("-!") {
-      inline_only = true;
+      config_override = InlineConfigOverride::SkipPreNormal;
       rest = stripped;
       continue;
     }
     if let Some(stripped) = rest.strip_prefix("!!") {
-      inline_only = true;
+      config_override = InlineConfigOverride::SkipAllConfig;
       rest = stripped;
       continue;
     }
     if let Some(stripped) = rest.strip_prefix('!') {
-      inline_only = true;
+      config_override = InlineConfigOverride::SkipNormal;
       rest = stripped;
       continue;
     }
@@ -37,7 +74,7 @@ pub fn parse_inline_request(request: &str) -> InlineRequest {
 
   if !rest.contains('!') {
     return InlineRequest {
-      inline_only,
+      config_override,
       loaders: Vec::new(),
       resource: rest.to_string(),
     };
@@ -51,14 +88,14 @@ pub fn parse_inline_request(request: &str) -> InlineRequest {
 
   if resource_index == 0 && !parts[0].starts_with('.') && !parts[0].starts_with('/') {
     return InlineRequest {
-      inline_only,
+      config_override,
       loaders: Vec::new(),
       resource: rest.to_string(),
     };
   }
 
   InlineRequest {
-    inline_only,
+    config_override,
     loaders: parts[..resource_index]
       .iter()
       .map(|loader| loader.to_string())
@@ -73,12 +110,12 @@ pub fn build_module_id(
   query: &str,
 ) -> String {
   let base = format!("{resource_path}{query}");
+  let prefix = inline.config_override.prefix();
+
   if inline.loaders.is_empty() {
-    base
-  } else if inline.inline_only {
-    format!("-!{}!{base}", inline.loaders.join("!"))
+    format!("{prefix}{base}")
   } else {
-    format!("{}!{base}", inline.loaders.join("!"))
+    format!("{prefix}{}!{base}", inline.loaders.join("!"))
   }
 }
 
@@ -92,7 +129,7 @@ mod tests {
     assert_eq!(
       parsed,
       InlineRequest {
-        inline_only: false,
+        config_override: InlineConfigOverride::None,
         loaders: vec![],
         resource: "./index.meow-v2?type=template".to_string(),
       }
@@ -104,7 +141,7 @@ mod tests {
     let parsed = parse_inline_request(
       "-!meow-wrap-script-export!typescript-loader!meow-extract-script!./index.meow-v2?type=script&lang=ts",
     );
-    assert!(parsed.inline_only);
+    assert_eq!(parsed.config_override, InlineConfigOverride::SkipPreNormal);
     assert_eq!(
       parsed.loaders,
       vec![
@@ -116,6 +153,31 @@ mod tests {
     assert_eq!(
       parsed.resource,
       "./index.meow-v2?type=script&lang=ts".to_string()
+    );
+  }
+
+  #[test]
+  fn parse_bang_skips_only_normal_config() {
+    let parsed = parse_inline_request("!style-loader!css-loader!./a.css");
+    assert_eq!(parsed.config_override, InlineConfigOverride::SkipNormal);
+    assert!(parsed.config_override.allows_config_rule(LoaderEnforce::Pre));
+    assert!(!parsed.config_override.allows_config_rule(LoaderEnforce::Normal));
+    assert!(parsed.config_override.allows_config_rule(LoaderEnforce::Post));
+  }
+
+  #[test]
+  fn parse_double_bang_skips_all_config() {
+    let parsed = parse_inline_request("!!style-loader!./a.css");
+    assert_eq!(parsed.config_override, InlineConfigOverride::SkipAllConfig);
+    assert!(!parsed.config_override.allows_config_rule(LoaderEnforce::Post));
+  }
+
+  #[test]
+  fn build_module_id_preserves_prefix() {
+    let inline = parse_inline_request("-!a!b!./f?type=script");
+    assert_eq!(
+      build_module_id(&inline, "/abs/f", "?type=script"),
+      "-!a!b!/abs/f?type=script"
     );
   }
 }

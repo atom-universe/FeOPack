@@ -11,7 +11,7 @@ use crate::loader::meow_loader_v2::{
 };
 use crate::loader::meow_loader_v3::{meow_loader_v3_main, meow_v3_pitch, meow_v3_pitcher_normal};
 use crate::loader::typescript_loader::typescript_loader;
-use crate::loader::{Loader, LoaderRegistry, LoaderRule};
+use crate::loader::{Loader, LoaderEnforce, LoaderRegistry, LoaderRule};
 use crate::loader::inline_request::InlineRequest;
 use crate::module_graph::ModuleGraph;
 use std::collections::HashMap;
@@ -86,6 +86,9 @@ pub struct Compilation {
   // make 阶段的 build result 先简单放这里。
   // 真实 bundler 通常会把这类信息挂在 Module/BuildResult 上；这里先用 map 保持 MVP 清晰。
   pub(crate) module_sources: HashMap<String, String>,
+  /// 单次 compilation 内缓存磁盘原文（对齐 webpack InputFileSystem / rspack 的 per-build 读盘缓存）。
+  /// key 为 normalize 后的 resource_path，virtual request 的 query/inline 不影响 key。
+  pub(crate) file_source_cache: HashMap<PathBuf, String>,
   pub(crate) loader_registry: LoaderRegistry,
 }
 
@@ -150,11 +153,13 @@ impl Compilation {
       test: ".txt".to_string(),
       resource_query: String::new(),
       used_loaders: vec!["text-loader".to_string()],
+      enforce: LoaderEnforce::Normal,
     });
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v1".to_string(),
       resource_query: String::new(),
       used_loaders: vec!["meow-loader-v1".to_string()],
+      enforce: LoaderEnforce::Normal,
     });
 
     // inline loader 之前：每个 virtual request 都要在这里手写一条 resourceQuery rule。
@@ -213,6 +218,7 @@ impl Compilation {
       test: ".meow-v2".to_string(),
       resource_query: String::new(),
       used_loaders: vec!["meow-loader-v2-main".to_string()],
+      enforce: LoaderEnforce::Normal,
     });
 
     // meow-v3：pitch 认 query + rule 配 loader 链（对比 v2 的 inline import 方案）
@@ -223,6 +229,7 @@ impl Compilation {
         "meow-v3-pitcher".to_string(),
         "meow-loader-v3-main".to_string(),
       ],
+      enforce: LoaderEnforce::Normal,
     });
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v3".to_string(),
@@ -233,6 +240,7 @@ impl Compilation {
         "typescript-loader".to_string(),
         "meow-extract-script".to_string(),
       ],
+      enforce: LoaderEnforce::Normal,
     });
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v3".to_string(),
@@ -242,6 +250,7 @@ impl Compilation {
         "meow-wrap-script-export".to_string(),
         "meow-extract-script".to_string(),
       ],
+      enforce: LoaderEnforce::Normal,
     });
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v3".to_string(),
@@ -251,6 +260,7 @@ impl Compilation {
         "meow-wrap-template-export".to_string(),
         "meow-extract-template".to_string(),
       ],
+      enforce: LoaderEnforce::Normal,
     });
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v3".to_string(),
@@ -261,6 +271,7 @@ impl Compilation {
         "meow-scope-style".to_string(),
         "meow-extract-style".to_string(),
       ],
+      enforce: LoaderEnforce::Normal,
     });
     loader_registry.add_rule(LoaderRule {
       test: ".meow-v3".to_string(),
@@ -270,12 +281,14 @@ impl Compilation {
         "meow-wrap-style-export".to_string(),
         "meow-extract-style".to_string(),
       ],
+      enforce: LoaderEnforce::Normal,
     });
 
     loader_registry.add_rule(LoaderRule {
       test: ".ts".to_string(),
       resource_query: String::new(),
       used_loaders: vec!["typescript-loader".to_string()],
+      enforce: LoaderEnforce::Normal,
     });
 
     Self {
@@ -284,6 +297,7 @@ impl Compilation {
       chunk_graph: ChunkGraph::default(),
       assets: Vec::new(),
       module_sources: HashMap::new(),
+      file_source_cache: HashMap::new(),
       loader_registry,
     }
   }

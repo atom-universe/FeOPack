@@ -47,7 +47,8 @@ impl Compilation {
   }
 
   async fn build_module(&mut self, module_id: String) -> Result<Vec<String>, String> {
-    let context = Path::new(&self.options.context);
+    let context_path = self.options.context.clone();
+    let context = Path::new(&context_path);
     let inline = inline_request::parse_inline_request(&module_id);
     let (module_resource_path, query) = inline
       .resource
@@ -103,7 +104,7 @@ impl Compilation {
   }
 
   async fn load_module_source(
-    &self,
+    &mut self,
     module_path: &PathBuf,
     query: &str,
     inline: &inline_request::InlineRequest,
@@ -122,9 +123,7 @@ impl Compilation {
     {
       pitched_source
     } else {
-      read_to_string(module_path)
-        .await
-        .map_err(|e| format!("读取模块文件失败 {:?}: {}", module_path, e))?
+      self.read_resource_file(module_path).await?
     };
 
     self.loader_registry.run_normal(
@@ -136,5 +135,21 @@ impl Compilation {
       &loader_chain,
       source,
     )
+  }
+
+  /// 读磁盘原文，同一次 compilation 内按 resource_path 去重。
+  async fn read_resource_file(&mut self, module_path: &PathBuf) -> Result<String, String> {
+    let cache_key = Self::normalize_path(module_path)?;
+
+    if let Some(cached) = self.file_source_cache.get(&cache_key) {
+      return Ok(cached.clone());
+    }
+
+    let content = read_to_string(&cache_key)
+      .await
+      .map_err(|e| format!("读取模块文件失败 {:?}: {}", cache_key, e))?;
+
+    self.file_source_cache.insert(cache_key, content.clone());
+    Ok(content)
   }
 }

@@ -16,11 +16,20 @@ pub mod inline_request;
 //   'ts-loader',
 //   'babel-loader',
 // ]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LoaderEnforce {
+  #[default]
+  Normal,
+  Pre,
+  Post,
+}
+
 #[derive(Debug)]
 pub struct LoaderRule {
   pub test: String,
   pub resource_query: String,
   pub used_loaders: Vec<String>,
+  pub enforce: LoaderEnforce,
 }
 
 #[derive(Debug, Clone)]
@@ -111,7 +120,10 @@ impl LoaderRegistry {
     //   loader 名用 ! 分隔，写在 resource 前面；执行顺序从右往左
     //
     //   -!loader1!loader2!resource
-    //   -!前缀：只跑 inline 里的 loader，跳过 mod.rs 的 rule 匹配
+    //   前缀语义（对齐 webpack）：
+    //     !   → 跳过 config normal
+    //     -!  → 跳过 config pre + normal（post 仍可能参与）
+    //     !!  → 跳过 config pre + normal + post
     //
     //   ./index.ts
     //   typescript-loader!./index.ts
@@ -143,17 +155,20 @@ impl LoaderRegistry {
       loader_chain.extend(inline.loaders.iter().cloned());
     }
 
-    if !inline.inline_only {
-      if let Some(rule) = self.rules.iter().find(|rule| {
-        resource_path
-          .extension()
-          .and_then(|ext| ext.to_str())
-          .map(|ext| {
-            rule.test.trim_start_matches('.') == ext && rule.resource_query == resource_query
-          })
-          .unwrap_or(false)
-      }) {
-        loader_chain.extend(rule.used_loaders.iter().cloned());
+    for enforce in [LoaderEnforce::Pre, LoaderEnforce::Normal, LoaderEnforce::Post] {
+      if inline.config_override.allows_config_rule(enforce) {
+        if let Some(rule) = self.rules.iter().find(|rule| {
+          rule.enforce == enforce
+            && resource_path
+              .extension()
+              .and_then(|ext| ext.to_str())
+              .map(|ext| {
+                rule.test.trim_start_matches('.') == ext && rule.resource_query == resource_query
+              })
+              .unwrap_or(false)
+        }) {
+          loader_chain.extend(rule.used_loaders.iter().cloned());
+        }
       }
     }
 
@@ -287,6 +302,7 @@ mod tests {
       test: ".txt".to_string(),
       resource_query: String::new(),
       used_loaders: vec!["pitcher".to_string(), "worker".to_string()],
+      enforce: LoaderEnforce::Normal,
     });
 
     let inline = InlineRequest::default();
@@ -319,6 +335,7 @@ mod tests {
       test: ".txt".to_string(),
       resource_query: String::new(),
       used_loaders: vec!["pitcher".to_string(), "worker".to_string()],
+      enforce: LoaderEnforce::Normal,
     });
 
     let inline = InlineRequest::default();
