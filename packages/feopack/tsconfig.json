@@ -10,7 +10,11 @@
     }
   },
   "include": ["src", "src/**/*.json"],
-  "exclude": ["src/config/schema.check.js", "src/container/default.runtime.js"],
+  "exclude": [
+    "src/config/schema.check.js",
+    "src/container/default.runtime.js",
+    "src/loader-runner/fixtures/**"
+  ],
   "ts-node": {
     "transpileOnly": true
   }

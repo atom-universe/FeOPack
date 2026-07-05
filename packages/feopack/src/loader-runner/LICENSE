@@ -1,0 +1,6 @@
+The loader-runner code in this directory is derived from:
+
+1. [webpack/loader-runner](https://github.com/webpack/loader-runner) (MIT)
+2. [Rspack loader-runner](https://github.com/web-infra-dev/rspack/tree/main/packages/rspack/src/loader-runner) — feopack keeps a simplified subset aligned with `JsLoaderContext` / `runLoaders` shape.
+
+MIT License — see webpack and rspack upstream licenses.

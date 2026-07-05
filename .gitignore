@@ -131,3 +131,6 @@ Cargo.lock
 
 
 debug
+
+# 本地学习笔记 / 博客草稿（不提交）
+notes/local/

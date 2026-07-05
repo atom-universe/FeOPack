@@ -11,6 +11,9 @@ pub mod meow_loader_v2;
 pub mod meow_loader_v3;
 pub mod typescript_loader;
 pub mod inline_request;
+pub mod js_bridge;
+
+pub use js_bridge::{is_js_loader, split_loader_chain, JsLoaderRequest, JsLoaderRunner};
 
 // test: '/\.test$/',
 // use_loaders: [
@@ -83,6 +86,8 @@ impl Loader {
 #[derive(Debug)]
 pub struct LoaderRegistry {
   loaders: HashMap<String, Loader>,
+  /// config module.rules（优先于内置 rules）
+  user_rules: Vec<LoaderRule>,
   rules: Vec<LoaderRule>,
 }
 
@@ -90,8 +95,13 @@ impl LoaderRegistry {
   pub fn new() -> Self {
     Self {
       loaders: HashMap::new(),
+      user_rules: Vec::new(),
       rules: Vec::new(),
     }
+  }
+
+  pub fn set_user_rules(&mut self, rules: Vec<LoaderRule>) {
+    self.user_rules = rules;
   }
 
   pub fn register_loader(&mut self, name: String, loader: Loader) {
@@ -168,6 +178,16 @@ impl LoaderRegistry {
       return loader_chain;
     }
 
+    // 用户 config module.rules（优先于内置 enforce rules）
+    if let Some(rule) = self
+      .user_rules
+      .iter()
+      .find(|rule| Self::rule_matches(rule, resource_path, resource_query))
+    {
+      loader_chain.extend(rule.used_loaders.iter().cloned());
+      return loader_chain;
+    }
+
     for enforce in [LoaderEnforce::Pre, LoaderEnforce::Normal, LoaderEnforce::Post] {
       if inline.config_override.allows_config_rule(enforce) {
         if let Some(rule) = self.rules.iter().find(|rule| {
@@ -186,6 +206,14 @@ impl LoaderRegistry {
     }
 
     loader_chain
+  }
+
+  fn rule_matches(rule: &LoaderRule, resource_path: &PathBuf, resource_query: &str) -> bool {
+    resource_path
+      .extension()
+      .and_then(|ext| ext.to_str())
+      .is_some_and(|ext| rule.test.trim_start_matches('.') == ext)
+      && rule.resource_query == resource_query
   }
 
   /// pitch 阶段：从左到右；若某个 pitch 返回 ShortCircuit，则跳过后续 pitch 与读盘

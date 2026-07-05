@@ -1,5 +1,6 @@
 use super::{Compilation, ResolvedPath};
 use crate::loader::inline_request;
+use crate::loader::{split_loader_chain, JsLoaderRequest};
 use crate::module_graph::Module;
 use crate::swc_compiler::SwcCompiler;
 use std::collections::{HashSet, VecDeque};
@@ -109,8 +110,11 @@ impl Compilation {
     query: &str,
     inline: &inline_request::InlineRequest,
   ) -> Result<String, String> {
-    // pitch 阶段发生在读盘之前
-    let loader_chain = self.loader_registry.resolve_chain(module_path, query, inline);
+    
+    /// 注册后走 normalize，把无论是 js 的还是 rust 的 loaderchain 都转成一个 chain
+    let loader_chain = self
+      .loader_registry
+      .resolve_chain(module_path, query, inline);
     let pitch_context = crate::loader::LoaderContext {
       resource_path: module_path.clone(),
       resource_query: query.to_string(),
@@ -126,15 +130,47 @@ impl Compilation {
       self.read_resource_file(module_path).await?
     };
 
-    self.loader_registry.run_normal(
-      crate::loader::LoaderContext {
-        resource_path: module_path.clone(),
-        resource_query: query.to_string(),
-        source: String::new(),
-      },
-      &loader_chain,
-      source,
-    )
+    // 统一下参数格式
+    let normal_context = crate::loader::LoaderContext {
+      resource_path: module_path.clone(),
+      resource_query: query.to_string(),
+      source: String::new(),
+    };
+
+    // 执行的时候拆出来，js 的走 ipc 丢回去给 node 侧跑 js loader runner 执行，rust 的就留在这边跑
+    let (rust_loaders, js_loaders) = split_loader_chain(&loader_chain);
+    let mut cur_source = source;
+
+    if !rust_loaders.is_empty() {
+      cur_source = self.loader_registry.run_normal(
+        normal_context.clone(),
+        &rust_loaders,
+        cur_source,
+      )?;
+    }
+
+    if !js_loaders.is_empty() {
+      let runner = self
+        .js_loader_runner
+        .as_ref()
+        .ok_or_else(|| "JS loader runner 初始化失败".to_string())?;
+
+      let resource = format!(
+        "{}{}{}",
+        module_path.display(),
+        query,
+        ""
+      );
+
+      cur_source = runner(JsLoaderRequest {
+        loaders: js_loaders,
+        resource,
+        source: cur_source,
+        context: self.options.context.clone(),
+      })?;
+    }
+
+    Ok(cur_source)
   }
 
   /// 读磁盘原文，同一次 compilation 内按 resource_path 去重。

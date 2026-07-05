@@ -11,8 +11,8 @@ use crate::loader::meow_loader_v2::{
 };
 use crate::loader::meow_loader_v3::{meow_loader_v3_main, meow_v3_pitch, meow_v3_pitcher_normal};
 use crate::loader::typescript_loader::typescript_loader;
-use crate::loader::{Loader, LoaderEnforce, LoaderRegistry, LoaderRule};
 use crate::loader::inline_request::InlineRequest;
+use crate::loader::{JsLoaderRunner, Loader, LoaderEnforce, LoaderRegistry, LoaderRule};
 use crate::module_graph::ModuleGraph;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -23,6 +23,12 @@ pub struct Output {
   pub filename: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct ModuleRuleOptions {
+  pub test: String,
+  pub use_loaders: Vec<String>,
+}
+
 // 对齐 Node-Binding 并做一些 Rust 侧的类型适配。（同时也避免循环依赖）
 #[derive(Debug, Clone)]
 pub struct CompilationOptions {
@@ -30,6 +36,7 @@ pub struct CompilationOptions {
   pub mode: String,
   pub context: String,
   pub output: Output,
+  pub module_rules: Vec<ModuleRuleOptions>,
 }
 
 #[derive(Debug, Clone)]
@@ -77,25 +84,34 @@ pub(crate) struct ResolvedModule {
 }
 
 
-#[derive(Debug)]
 pub struct Compilation {
   pub options: CompilationOptions,
   pub module_graph: ModuleGraph,
   pub chunk_graph: ChunkGraph,
   pub assets: Vec<GeneratedAsset>,
-  // make 阶段的 build result 先简单放这里。
-  // 真实 bundler 通常会把这类信息挂在 Module/BuildResult 上；这里先用 map 保持 MVP 清晰。
   pub(crate) module_sources: HashMap<String, String>,
-  /// 单次 compilation 内缓存磁盘原文（对齐 webpack InputFileSystem / rspack 的 per-build 读盘缓存）。
-  /// key 为 normalize 后的 resource_path，virtual request 的 query/inline 不影响 key。
   pub(crate) file_source_cache: HashMap<PathBuf, String>,
   pub(crate) loader_registry: LoaderRegistry,
+  #[allow(dead_code)]
+  pub(crate) js_loader_runner: Option<JsLoaderRunner>,
 }
 
 impl Compilation {
-  pub fn new(options: CompilationOptions) -> Self {
+  pub fn new(options: CompilationOptions, js_loader_runner: Option<JsLoaderRunner>) -> Self {
     println!("\n\nCompilation new: {:?}\n\n", options);
     let mut loader_registry = LoaderRegistry::new();
+
+    let user_rules = options
+      .module_rules
+      .iter()
+      .map(|rule| LoaderRule {
+        test: rule.test.clone(),
+        resource_query: String::new(),
+        used_loaders: rule.use_loaders.clone(),
+        enforce: LoaderEnforce::Normal,
+      })
+      .collect();
+    loader_registry.set_user_rules(user_rules);
 
     loader_registry.register_loader("text-loader".to_string(), Loader::normal_only(text_loader));
     loader_registry.register_loader(
@@ -245,6 +261,7 @@ impl Compilation {
       module_sources: HashMap::new(),
       file_source_cache: HashMap::new(),
       loader_registry,
+      js_loader_runner,
     }
   }
 

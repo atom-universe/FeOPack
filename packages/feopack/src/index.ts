@@ -8,7 +8,39 @@ export interface FeopackOptions {
     path: string
     filename: string
   }
+  module?: {
+    rules?: Array<{
+      test: string | RegExp
+      use: string | string[]
+    }>
+  }
 }
+
+export {
+  runLoaders,
+  runLoadersAsync,
+  getContext,
+} from './loader-runner'
+export {
+  runJsLoaders,
+  jsLoaderContextToRunLoadersOptions,
+  runJsLoadersFromSnapshot,
+  snapshotToRunLoadersOptions,
+} from './loader-runner/snapshot'
+export {
+  registerJsLoaderDispatcher,
+  invokeJsLoaderDispatcher,
+  createDefaultJsLoaderDispatcher,
+} from './loader-runner/dispatcher'
+export type {
+  JsLoaderContext,
+  JsLoaderSnapshot,
+  JsLoaderResult,
+  JsLoaderState,
+  LoaderContext,
+  RunLoadersOptions,
+  RunLoadersResult,
+} from './loader-runner/types'
 
 function feopack(options: FeopackOptions): Compiler {
   return new Compiler(options)

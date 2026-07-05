@@ -14,4 +14,4 @@ swc_ecma_parser                = "30.0.0"
 swc_ecma_transforms_base       = "32.0.0"
 swc_ecma_transforms_typescript = "35.0.0"
 swc_ecma_visit                 = "19.0.0"
-tokio            = { version = "1", features = ["fs"] }
+tokio            = { version = "1", features = ["fs", "rt", "io-util"] }

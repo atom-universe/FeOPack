@@ -2,6 +2,13 @@ import { FeopackOptions } from '.'
 import * as binding from '@feopack/binding'
 import { getRawOptions } from './config/adapter'
 import { Compilation } from './Complication'
+import {
+  createDefaultJsLoaderDispatcher,
+  registerJsLoaderDispatcher,
+} from './loader-runner/dispatcher'
+import { runJsLoadersSync } from './loader-runner/snapshot'
+import { JsLoaderState } from './loader-runner/types'
+
 export class Compiler {
   #inner?: binding.Rspack // Rust 那一侧对应的 Compiler
   // 打包的根路径
@@ -12,6 +19,7 @@ export class Compiler {
   constructor(options: FeopackOptions) {
     this.context = options.context
     this.options = options
+    registerJsLoaderDispatcher(createDefaultJsLoaderDispatcher())
   }
 
   #getInner(): binding.Rspack {
@@ -22,10 +30,29 @@ export class Compiler {
     // 拿到 rust 那一侧的 compiler 实例
     const instanceBinding = require('@feopack/binding')
 
+    // 把 js loader runner 传递给 rust 那一侧
     this.#inner = new instanceBinding.Rspack(
       rawOptions,
-      // ThreadsafeWritableNodeFS.__to_binding(this.outputFileSystem!),
-      // ResolverFactory.__to_binding(this.resolverFactory),
+      (ctx: binding.JsLoaderContextInput) => {
+        try {
+          // 其实这个玩意儿的核心实现就是直接 fork 的 webpack 的源码
+          const result = runJsLoadersSync({
+            loaderState:
+              ctx.loaderState === 'pitching'
+                ? JsLoaderState.Pitching
+                : JsLoaderState.Normal,
+            loaders: ctx.loaders,
+            resource: ctx.resource,
+            source: ctx.source,
+            context: ctx.context,
+            skipReadResource: ctx.skipReadResource,
+          })
+          return { source: result.source }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          throw new Error(`feopack js loader: ${message}`)
+        }
+      },
     )
 
     return this.#inner!

@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc && cp -r src/loader-runner/fixtures dist/loader-runner/fixtures",
+    "test": "pnpm build && node --test dist/loader-runner/runner.test.js"
   },
   "exports": {
     ".": "./dist/index.js"
