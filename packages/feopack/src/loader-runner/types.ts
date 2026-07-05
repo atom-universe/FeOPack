@@ -18,8 +18,10 @@ export interface JsLoaderContext {
   resource: string
   /** pitch 阶段通常为空；normal 阶段为链上一步输出 */
   source: string
-  /** webpack context（项目根） */
-  context: string
+  /** 对应 webpack 配置里的 `context` 字段，
+   * 个人认为叫 context 的话太容易和 loaderContext 搞混了
+   */
+  projectRoot: string
   cacheable?: boolean
   fileDependencies?: string[]
   contextDependencies?: string[]
@@ -88,6 +90,7 @@ export type LoaderCallback = (
 export interface RunLoadersOptions {
   resource?: string
   loaders?: string[]
+  initialArgs?: unknown[]
   context?: Partial<LoaderContext>
   readResource?: (
     path: string,
@@ -111,6 +114,8 @@ export interface RunLoadersResult {
 
 export interface JsLoaderResult {
   source: string
+  shortCircuit: boolean
+  pitchedLoaderIndex?: number
   cacheable: boolean
   fileDependencies: string[]
   contextDependencies: string[]

@@ -14,6 +14,16 @@ import type {
   RunLoadersResult,
 } from './types'
 
+export interface RunPitchLoadersResult {
+  kind: 'continue' | 'shortCircuit'
+  result?: unknown[]
+  pitchedLoaderIndex?: number
+  cacheable: boolean
+  fileDependencies: string[]
+  contextDependencies: string[]
+  missingDependencies: string[]
+}
+
 interface ProcessOptions {
   resourceBuffer: Buffer | null
   processResource: (
@@ -53,6 +63,50 @@ function iterateNormalLoaders(
         return
       }
       iterateNormalLoaders(options, loaderContext, nextArgs, callback)
+    })
+    return
+  }
+
+  callback(null, args)
+}
+
+function iterateNormalLoadersOnly(
+  loaderContext: LoaderContext,
+  args: unknown[],
+  callback: LoaderCallback,
+): void {
+  while (loaderContext.loaderIndex >= 0) {
+    const currentLoaderObject = loaderContext.loaders[loaderContext.loaderIndex]
+
+    if (currentLoaderObject.normalExecuted) {
+      loaderContext.loaderIndex--
+      continue
+    }
+
+    loadLoader(currentLoaderObject, (err) => {
+      if (err) {
+        callback(err)
+        return
+      }
+
+      const fn = currentLoaderObject.normal
+      currentLoaderObject.normalExecuted = true
+
+      if (!fn) {
+        loaderContext.loaderIndex--
+        iterateNormalLoadersOnly(loaderContext, args, callback)
+        return
+      }
+
+      convertArgs(args, currentLoaderObject.raw)
+
+      runSyncOrAsync(fn, loaderContext, args, (runErr, ...nextArgs) => {
+        if (runErr) {
+          callback(runErr)
+          return
+        }
+        iterateNormalLoadersOnly(loaderContext, nextArgs, callback)
+      })
     })
     return
   }
@@ -148,6 +202,76 @@ function iteratePitchingLoaders(
   }
 
   processResource(options, loaderContext, callback)
+}
+
+function iteratePitchingLoadersOnly(
+  loaderContext: LoaderContext,
+  callback: (err: Error | null, result?: { kind: 'continue' | 'shortCircuit'; args?: unknown[]; pitchedLoaderIndex?: number }) => void,
+): void {
+  while (loaderContext.loaderIndex < loaderContext.loaders.length) {
+    const currentLoaderObject = loaderContext.loaders[loaderContext.loaderIndex]
+
+    if (currentLoaderObject.pitchExecuted) {
+      loaderContext.loaderIndex++
+      continue
+    }
+
+    loadLoader(currentLoaderObject, (err) => {
+      if (err) {
+        loaderContext.cacheable(false)
+        callback(err)
+        return
+      }
+
+      const fn = currentLoaderObject.pitch
+      currentLoaderObject.pitchExecuted = true
+
+      if (!fn) {
+        loaderContext.loaderIndex++
+        iteratePitchingLoadersOnly(loaderContext, callback)
+        return
+      }
+
+      runSyncOrAsync(
+        fn,
+        loaderContext,
+        [
+          loaderContext.remainingRequest,
+          loaderContext.previousRequest,
+          (currentLoaderObject.data = {}),
+        ],
+        (pitchErr, ...args) => {
+          if (pitchErr) {
+            callback(pitchErr)
+            return
+          }
+
+          let hasArg = false
+          for (let i = 0; i < args.length; i++) {
+            if (args[i] !== undefined) {
+              hasArg = true
+              break
+            }
+          }
+
+          if (hasArg) {
+            callback(null, {
+              kind: 'shortCircuit',
+              args,
+              pitchedLoaderIndex: loaderContext.loaderIndex,
+            })
+            return
+          }
+
+          loaderContext.loaderIndex++
+          iteratePitchingLoadersOnly(loaderContext, callback)
+        },
+      )
+    })
+    return
+  }
+
+  callback(null, { kind: 'continue' })
 }
 
 function buildLoaderContext(
@@ -351,11 +475,106 @@ export function runLoaders(
   })
 }
 
+export function runLoadersPitchOnly(
+  options: RunLoadersOptions,
+  callback: (err: Error | null, result?: RunPitchLoadersResult) => void,
+): void {
+  const resource = options.resource || ''
+  const loaders = (options.loaders || []).map(createLoaderObject)
+  const { loaderContext, getCacheable } = buildLoaderContext(resource, loaders, options.context)
+
+  iteratePitchingLoadersOnly(loaderContext, (err, result) => {
+    if (err || !result) {
+      callback(err ?? new Error('runLoadersPitchOnly failed without error'), {
+        kind: 'continue',
+        cacheable: false,
+        fileDependencies: loaderContext.getDependencies(),
+        contextDependencies: loaderContext.getContextDependencies(),
+        missingDependencies: loaderContext.getMissingDependencies(),
+      })
+      return
+    }
+
+    callback(null, {
+      kind: result.kind,
+      result: result.args,
+      pitchedLoaderIndex: result.pitchedLoaderIndex,
+      cacheable: getCacheable(),
+      fileDependencies: loaderContext.getDependencies(),
+      contextDependencies: loaderContext.getContextDependencies(),
+      missingDependencies: loaderContext.getMissingDependencies(),
+    })
+  })
+}
+
+export function runLoadersNormalOnly(
+  options: RunLoadersOptions,
+  callback: (err: Error | null, result?: RunLoadersResult) => void,
+): void {
+  const resource = options.resource || ''
+  const loaders = (options.loaders || []).map(createLoaderObject)
+  const { loaderContext, getCacheable } = buildLoaderContext(resource, loaders, options.context)
+  const initialArgs = options.initialArgs ?? [null]
+
+  loaderContext.loaderIndex = loaders.length - 1
+
+  iterateNormalLoadersOnly(loaderContext, initialArgs, (err, result) => {
+    if (err) {
+      callback(err, {
+        result: undefined,
+        resourceBuffer: null,
+        cacheable: false,
+        fileDependencies: loaderContext.getDependencies(),
+        contextDependencies: loaderContext.getContextDependencies(),
+        missingDependencies: loaderContext.getMissingDependencies(),
+      })
+      return
+    }
+
+    callback(null, {
+      result,
+      resourceBuffer: null,
+      cacheable: getCacheable(),
+      fileDependencies: loaderContext.getDependencies(),
+      contextDependencies: loaderContext.getContextDependencies(),
+      missingDependencies: loaderContext.getMissingDependencies(),
+    })
+  })
+}
+
 export function runLoadersAsync(options: RunLoadersOptions): Promise<RunLoadersResult> {
   return new Promise((resolve, reject) => {
     runLoaders(options, (err, result) => {
       if (err || !result) {
         reject(err ?? new Error('runLoaders failed without error'))
+        return
+      }
+      resolve(result)
+    })
+  })
+}
+
+export function runLoadersPitchOnlyAsync(
+  options: RunLoadersOptions,
+): Promise<RunPitchLoadersResult> {
+  return new Promise((resolve, reject) => {
+    runLoadersPitchOnly(options, (err, result) => {
+      if (err || !result) {
+        reject(err ?? new Error('runLoadersPitchOnly failed without error'))
+        return
+      }
+      resolve(result)
+    })
+  })
+}
+
+export function runLoadersNormalOnlyAsync(
+  options: RunLoadersOptions,
+): Promise<RunLoadersResult> {
+  return new Promise((resolve, reject) => {
+    runLoadersNormalOnly(options, (err, result) => {
+      if (err || !result) {
+        reject(err ?? new Error('runLoadersNormalOnly failed without error'))
         return
       }
       resolve(result)

@@ -1,4 +1,8 @@
-import { runLoaders, runLoadersAsync } from './index'
+import {
+  runLoaders,
+  runLoadersNormalOnlyAsync,
+  runLoadersPitchOnlyAsync,
+} from './index'
 import type { JsLoaderContext, JsLoaderResult, RunLoadersOptions } from './types'
 import { JsLoaderState } from './types'
 
@@ -12,7 +16,7 @@ export function jsLoaderContextToRunLoadersOptions(
     resource: ctx.resource,
     loaders: ctx.loaders,
     context: {
-      context: ctx.context,
+      context: ctx.projectRoot,
     },
     processResource: (loaderContext, resourcePath, callback) => {
       loaderContext.addDependency(resourcePath)
@@ -58,12 +62,12 @@ function normalizeRunResult(result: unknown): string {
  */
 export function runJsLoadersSync(ctx: JsLoaderContext): JsLoaderResult {
   if (ctx.loaderState === JsLoaderState.Pitching) {
-    // pitch 混链待 Rust rspack_loader_runner 状态机对接；当前先处理 normal 段。
+    throw new Error('feopack: runJsLoadersSync 暂不支持 Pitching 阶段')
   }
 
   const options = jsLoaderContextToRunLoadersOptions(ctx)
   let error: Error | null = null
-  let runResult: Awaited<ReturnType<typeof runLoadersAsync>> | undefined
+  let runResult: Awaited<ReturnType<typeof runLoadersNormalOnlyAsync>> | undefined
 
   runLoaders(options, (err, result) => {
     if (err || !result) {
@@ -79,6 +83,7 @@ export function runJsLoadersSync(ctx: JsLoaderContext): JsLoaderResult {
 
   return {
     source: normalizeRunResult(runResult!.result),
+    shortCircuit: false,
     cacheable: runResult!.cacheable,
     fileDependencies: runResult!.fileDependencies,
     contextDependencies: runResult!.contextDependencies,
@@ -92,14 +97,28 @@ export function runJsLoadersSync(ctx: JsLoaderContext): JsLoaderResult {
  */
 export async function runJsLoaders(ctx: JsLoaderContext): Promise<JsLoaderResult> {
   if (ctx.loaderState === JsLoaderState.Pitching) {
-    // pitch 混链待 Rust rspack_loader_runner 状态机对接；当前先处理 normal 段。
+    const options = jsLoaderContextToRunLoadersOptions(ctx)
+    const runResult = await runLoadersPitchOnlyAsync(options)
+    return {
+      source: normalizeRunResult(runResult.result),
+      shortCircuit: runResult.kind === 'shortCircuit',
+      pitchedLoaderIndex: runResult.pitchedLoaderIndex,
+      cacheable: runResult.cacheable,
+      fileDependencies: runResult.fileDependencies,
+      contextDependencies: runResult.contextDependencies,
+      missingDependencies: runResult.missingDependencies,
+    }
   }
 
-  const options = jsLoaderContextToRunLoadersOptions(ctx)
-  const runResult = await runLoadersAsync(options)
+  const options = {
+    ...jsLoaderContextToRunLoadersOptions(ctx),
+    initialArgs: [ctx.source],
+  }
+  const runResult = await runLoadersNormalOnlyAsync(options)
 
   return {
     source: normalizeRunResult(runResult.result),
+    shortCircuit: false,
     cacheable: runResult.cacheable,
     fileDependencies: runResult.fileDependencies,
     contextDependencies: runResult.contextDependencies,

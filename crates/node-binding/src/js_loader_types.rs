@@ -7,7 +7,7 @@ pub struct JsLoaderContextInput {
   pub loaders: Vec<String>,
   pub resource: String,
   pub source: String,
-  pub context: String,
+  pub project_root: String,
   pub skip_read_resource: bool,
 }
 
@@ -15,4 +15,6 @@ pub struct JsLoaderContextInput {
 #[derive(Clone)]
 pub struct JsLoaderResultOutput {
   pub source: String,
+  pub short_circuit: bool,
+  pub pitched_loader_index: Option<u32>,
 }

@@ -23,8 +23,8 @@ export interface RawOptions {
   module?: ModuleConfig
 }
 export declare class Rspack {
-  constructor(options: RawOptions, jsRunner?: (ctx: JsLoaderContextInput) => JsLoaderResultOutput)
-  build(): void
+  constructor(options: RawOptions, jsRunner?: (ctx: JsLoaderContextInput) => Promise<JsLoaderResultOutput>)
+  build(): Promise<void>
 }
 
 export interface JsLoaderContextInput {
@@ -32,10 +32,12 @@ export interface JsLoaderContextInput {
   loaders: Array<string>
   resource: string
   source: string
-  context: string
+  projectRoot: string
   skipReadResource: boolean
 }
 
 export interface JsLoaderResultOutput {
   source: string
+  shortCircuit: boolean
+  pitchedLoaderIndex?: number
 }

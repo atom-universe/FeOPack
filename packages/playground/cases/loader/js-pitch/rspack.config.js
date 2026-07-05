@@ -8,8 +8,8 @@ module.exports = {
   module: {
     rules: [
       {
-        test: '.demo',
-        use: [path.resolve(__dirname, 'loaders/upper-loader.js')],
+        test: '.txt',
+        use: ['text-loader', path.resolve(__dirname, 'loaders/pitch-short-loader.js')],
       },
     ],
   },

@@ -13,7 +13,7 @@ pub mod typescript_loader;
 pub mod inline_request;
 pub mod js_bridge;
 
-pub use js_bridge::{is_js_loader, split_loader_chain, JsLoaderRequest, JsLoaderRunner};
+pub use js_bridge::{is_js_loader, JsLoaderRequest, JsLoaderRunResult, JsLoaderRunner};
 
 // test: '/\.test$/',
 // use_loaders: [

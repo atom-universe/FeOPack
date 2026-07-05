@@ -26,7 +26,7 @@ test('runJsLoaders 从 JsLoaderContext 跑 JS loader（Rspack 风格）', async 
     loaders: [upperLoaderPath],
     resource: '/project/src/app.txt',
     source: 'hello snapshot',
-    context: '/project',
+    projectRoot: '/project',
     skipReadResource: true,
   })
 
