@@ -1,4 +1,4 @@
-use super::{Chunk, Compilation};
+use super::super::{Chunk, Compilation};
 
 impl Compilation {
   /**

@@ -1,4 +1,5 @@
 pub mod compilation;
+mod lifecycle;
 
 use crate::loader::JsLoaderRunner;
 use compilation::{Compilation, CompilationOptions};
@@ -26,23 +27,17 @@ impl Compiler {
   }
 
   pub async fn build(&mut self) -> Result<(), String> {
+    self.initialize();
+    self.before_run();
+    self.run_lifecycle();
     self.compilation = Compilation::new(self.options.clone(), self.js_loader_runner.clone());
     self.compile().await?;
-    // TODO: compile_done()
+    self.done();
     Ok(())
   }
 
-  // napi 对外是同步 build()；内部仍用 async 管线，在这里阻塞跑完（见下方各行注释）
-  pub fn build_sync(&mut self) -> Result<(), String> {
-    let rt = tokio::runtime::Builder::new_multi_thread()
-      .enable_all()
-      .build()
-      .map_err(|e| format!("创建 tokio runtime 失败: {e}"))?;
-
-    rt.block_on(self.build())
-  }
-
   pub async fn emit_assets(&mut self) -> Result<(), String> {
+    self.emit();
     for asset in &self.compilation.assets {
       let output_dir = Path::new(&self.options.output.path);
       let output_file = output_dir.join(&asset.filename);
@@ -56,14 +51,19 @@ impl Compiler {
       fs::write(&output_file, asset.source.as_bytes())
         .await
         .map_err(|e| format!("写入失败 {:?}: {}", output_file, e))?;
+      self.asset_emitted(asset, &output_file);
     }
 
+    self.after_emit();
     Ok(())
   }
 
   pub async fn compile(&mut self) -> Result<(), String> {
+    self.before_compile();
+    self.compile_lifecycle();
     self.compilation.make().await?;
     self.compilation.seal().await?;
+    self.after_compile();
     self.emit_assets().await?;
     Ok(())
   }

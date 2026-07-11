@@ -1,8 +1,4 @@
-import {
-  runLoaders,
-  runLoadersNormalOnlyAsync,
-  runLoadersPitchOnlyAsync,
-} from './index'
+import { runLoadersNormalOnlyAsync, runLoadersPitchOnlyAsync } from './index'
 import type { JsLoaderContext, JsLoaderResult, RunLoadersOptions } from './types'
 import { JsLoaderState } from './types'
 
@@ -55,40 +51,6 @@ function normalizeRunResult(result: unknown): string {
   }
 
   throw new Error(`feopack: 无法把 loader 结果转为 source: ${typeof result}`)
-}
-
-/**
- * 同步版：供 napi build_sync 在主线程直接调用（loader 链需同步完成）。
- */
-export function runJsLoadersSync(ctx: JsLoaderContext): JsLoaderResult {
-  if (ctx.loaderState === JsLoaderState.Pitching) {
-    throw new Error('feopack: runJsLoadersSync 暂不支持 Pitching 阶段')
-  }
-
-  const options = jsLoaderContextToRunLoadersOptions(ctx)
-  let error: Error | null = null
-  let runResult: Awaited<ReturnType<typeof runLoadersNormalOnlyAsync>> | undefined
-
-  runLoaders(options, (err, result) => {
-    if (err || !result) {
-      error = err ?? new Error('runLoaders failed without error')
-      return
-    }
-    runResult = result
-  })
-
-  if (error) {
-    throw error
-  }
-
-  return {
-    source: normalizeRunResult(runResult!.result),
-    shortCircuit: false,
-    cacheable: runResult!.cacheable,
-    fileDependencies: runResult!.fileDependencies,
-    contextDependencies: runResult!.contextDependencies,
-    missingDependencies: runResult!.missingDependencies,
-  }
 }
 
 /**

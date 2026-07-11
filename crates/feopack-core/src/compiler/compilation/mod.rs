@@ -1,17 +1,16 @@
-mod code_generation;
 mod make;
 mod resolve;
 mod seal;
 
-use crate::loader::text_loader::text_loader;
+use crate::loader::inline_request::InlineRequest;
 use crate::loader::meow_loader_v1::meow_loader_v1;
 use crate::loader::meow_loader_v2::{
   meow_extract_script, meow_extract_style, meow_extract_template, meow_loader_v2_main,
   meow_scope_style, meow_wrap_script_export, meow_wrap_style_export, meow_wrap_template_export,
 };
 use crate::loader::meow_loader_v3::{meow_loader_v3_main, meow_v3_pitch, meow_v3_pitcher_normal};
+use crate::loader::text_loader::text_loader;
 use crate::loader::typescript_loader::typescript_loader;
-use crate::loader::inline_request::InlineRequest;
 use crate::loader::{JsLoaderRunner, Loader, LoaderEnforce, LoaderRegistry, LoaderRule};
 use crate::module_graph::ModuleGraph;
 use std::collections::HashMap;
@@ -82,7 +81,6 @@ pub(crate) struct ResolvedModule {
   pub resource_query: String,
   pub inline: InlineRequest,
 }
-
 
 pub struct Compilation {
   pub options: CompilationOptions,
@@ -267,16 +265,5 @@ impl Compilation {
 
   pub async fn make(&mut self) -> Result<(), String> {
     self.build_module_graph().await
-  }
-
-  pub async fn seal(&mut self) -> Result<(), String> {
-    // module graph 到这里以后先视为稳定，seal 负责把它组织成 chunk，并继续生成 assets。
-    println!(
-      "\n[rust seal 阶段] module graph -> chunk graph:\n {:?}\n",
-      self.module_graph.partials
-    );
-    self.create_chunk_graph().await;
-    self.code_generation().await?;
-    Ok(())
   }
 }

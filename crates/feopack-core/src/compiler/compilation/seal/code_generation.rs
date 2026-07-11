@@ -1,4 +1,4 @@
-use super::{CodegenModule, Compilation, GeneratedAsset, ResolvedPath};
+use super::super::{CodegenModule, Compilation, GeneratedAsset, ResolvedPath};
 use crate::loader::inline_request;
 use crate::swc_compiler::{RawImportRecord, ResolvedImportRecord, SwcCompiler};
 use std::collections::HashSet;
