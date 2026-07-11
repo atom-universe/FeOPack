@@ -1,15 +1,18 @@
 pub mod compilation;
 mod emit;
+mod hooks;
 mod lifecycle;
 
 use crate::loader::JsLoaderRunner;
 use compilation::{Compilation, CompilationOptions};
+use hooks::CompilerHooks;
 use std::result::Result;
 
 pub struct Compiler {
   compilation: Compilation,
   options: CompilationOptions,
   js_loader_runner: Option<JsLoaderRunner>,
+  hooks: CompilerHooks,
 }
 
 impl Compiler {
@@ -18,6 +21,7 @@ impl Compiler {
       compilation: Compilation::new(options.clone(), None),
       options,
       js_loader_runner: None,
+      hooks: CompilerHooks::default(),
     }
   }
 
@@ -26,21 +30,21 @@ impl Compiler {
   }
 
   pub async fn build(&mut self) -> Result<(), String> {
-    self.initialize();
-    self.before_run();
-    self.run_lifecycle();
+    self.initialize()?;
+    self.before_run()?;
+    self.run_lifecycle()?;
     self.compilation = Compilation::new(self.options.clone(), self.js_loader_runner.clone());
     self.compile().await?;
-    self.done();
+    self.done()?;
     Ok(())
   }
 
   pub async fn compile(&mut self) -> Result<(), String> {
-    self.before_compile();
-    self.compile_lifecycle();
+    self.before_compile()?;
+    self.compile_lifecycle()?;
     self.compilation.make().await?;
     self.compilation.seal().await?;
-    self.after_compile();
+    self.after_compile()?;
     self.emit_assets().await?;
     Ok(())
   }

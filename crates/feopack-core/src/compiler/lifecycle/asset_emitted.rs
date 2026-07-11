@@ -3,11 +3,16 @@ use crate::compiler::compilation::GeneratedAsset;
 use std::path::Path;
 
 impl Compiler {
-  pub(crate) fn asset_emitted(&self, asset: &GeneratedAsset, target_path: &Path) {
+  pub(crate) fn asset_emitted(
+    &self,
+    asset: &GeneratedAsset,
+    target_path: &Path,
+  ) -> Result<(), String> {
     println!(
       "[rust compiler lifecycle] asset_emitted filename={} target={}",
       asset.filename,
       target_path.display()
     );
+    self.hooks.asset_emitted.call()
   }
 }

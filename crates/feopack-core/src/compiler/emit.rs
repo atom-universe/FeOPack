@@ -4,7 +4,7 @@ use tokio::fs;
 
 impl Compiler {
   pub async fn emit_assets(&mut self) -> Result<(), String> {
-    self.emit();
+    self.emit()?;
     for asset in &self.compilation.assets {
       let output_dir = Path::new(&self.options.output.path);
       let output_file = output_dir.join(&asset.filename);
@@ -18,10 +18,10 @@ impl Compiler {
       fs::write(&output_file, asset.source.as_bytes())
         .await
         .map_err(|e| format!("写入失败 {:?}: {}", output_file, e))?;
-      self.asset_emitted(asset, &output_file);
+      self.asset_emitted(asset, &output_file)?;
     }
 
-    self.after_emit();
+    self.after_emit()?;
     Ok(())
   }
 }
