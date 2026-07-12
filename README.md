@@ -83,6 +83,40 @@ pnpm test chunk/basic
 
 > 虽然不是方便，但是够用了
 
+## 🧩 当前能力对比
+
+标记说明：
+
+- ✅ 已实现：当前已经支持；如果是简化实现，但覆盖主要学习 case，也算已实现
+- 🚧 计划实现：当前还没有完整实现，但后续会继续推进
+- ❌ 暂无计划：当前阶段暂时不会做
+
+| 能力 | Rspack | Feopack | 备注 |
+| --- | --- | --- | --- |
+| Rust 编译核心 | ✅ | ✅ | Feopack 已经有 Rust 侧 compiler 主流程，但规模远小于 Rspack |
+| TS/Node 外壳 | ✅ | ✅ | 通过 `napi-rs` 连接 JS 和 Rust |
+| 基础构建生命周期 | ✅ | ✅ | Feopack 已整理出 `build -> compile -> make -> seal -> emit` |
+| Module Graph | ✅ | ✅ | Feopack 支持静态 import 的简化模块图构建 |
+| Chunk Graph | ✅ | ✅ | Feopack 当前是简化版，主要把模块组织到单个 chunk |
+| Code Generation | ✅ | ✅ | Feopack 已能生成可运行 bundle，但 runtime 和产物结构都较简化 |
+| Rust Loader | ✅ | ✅ | 支持内置 Rust loader |
+| JS Loader Bridge | ✅ | ✅ | 已支持从 Rust 调用 Node 侧 JS loader runner |
+| Loader pitch / normal | ✅ | ✅ | Feopack 已支持简化版 pitch / normal 执行流 |
+| Inline Loader Request | ✅ | ✅ | 已支持类似 `-!loader!resource` 的基础解析 |
+| Plugin / Hook 系统 | ✅ | 🚧 | Feopack 目前只有 compiler lifecycle 和 hook 占位结构 |
+| JS Plugin 兼容 | ✅ | 🚧 | 后续计划支持 `plugin.apply(compiler)` 这一类入口 |
+| Compilation Hooks | ✅ | 🚧 | 例如 `processAssets`，后续按具体 case 增量实现 |
+| Watch Mode | ✅ | 🚧 | 暂未实现，属于后续 mini rspack 能力 |
+| Incremental Rebuild | ✅ | 🚧 | 暂未实现 |
+| HMR | ✅ | 🚧 | 暂未实现 |
+| Persistent Cache | ✅ | 🚧 | 暂未实现 |
+| Source Map | ✅ | 🚧 | 暂未实现完整 source map 支持 |
+| Tree Shaking | ✅ | 🚧 | 暂未实现 |
+| Code Splitting | ✅ | 🚧 | 暂未实现完整 chunk splitting |
+| Module Federation | ✅ | ❌ | 当前学习阶段暂不计划实现 |
+| 生产级 Resolver | ✅ | ❌ | Feopack 只会保留学习所需的简化解析能力 |
+| 完整 Webpack/Rspack 配置兼容 | ✅ | ❌ | Feopack 不追求完整兼容，只挑核心机制学习 |
+
 ## 📝 说明
 
 这是一个**学习性质**的项目，请勿用于实际生产（相信也没人会这么做）。
