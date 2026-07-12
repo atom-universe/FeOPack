@@ -14,7 +14,6 @@ pub fn get_script(source: &str) -> Option<String> {
   Some(script)
 }
 
-
 pub fn meow_loader_v1(context: LoaderContext) -> Result<String, String> {
   println!("meow_loader: {:?}", context.source);
   // TODO: 处理 context.source
@@ -33,7 +32,6 @@ pub fn meow_loader_v1(context: LoaderContext) -> Result<String, String> {
   .and_then(|s| s.strip_suffix("</script>"))
   .ok_or_else(|| "invalid .meow script format".to_string())?;
 
-
   let handled_result = format!(
     r#"
 const __feopack_meow_loader__ = () => {{ 
@@ -50,7 +48,6 @@ export {{ __feopack_meow_loader__ as default }};"#,
   handled_template,
   handled_script
 );
-
 
   Ok(handled_result)
 }

@@ -3,15 +3,23 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use inline_request::InlineRequest;
+use meow_loader_v1::meow_loader_v1;
+use meow_loader_v2::{
+  meow_extract_script, meow_extract_style, meow_extract_template, meow_loader_v2_main,
+  meow_scope_style, meow_wrap_script_export, meow_wrap_style_export, meow_wrap_template_export,
+};
 use meow_loader_v3::resolve_meow_v3_chain;
+use meow_loader_v3::{meow_loader_v3_main, meow_v3_pitch, meow_v3_pitcher_normal};
+use text_loader::text_loader;
+use typescript_loader::typescript_loader;
 
-pub mod text_loader;
+pub mod inline_request;
+pub mod js_bridge;
 pub mod meow_loader_v1;
 pub mod meow_loader_v2;
 pub mod meow_loader_v3;
+pub mod text_loader;
 pub mod typescript_loader;
-pub mod inline_request;
-pub mod js_bridge;
 
 pub use js_bridge::{is_js_loader, JsLoaderRequest, JsLoaderRunResult, JsLoaderRunner};
 
@@ -100,6 +108,93 @@ impl LoaderRegistry {
     }
   }
 
+  pub fn with_builtin_defaults() -> Self {
+    let mut registry = Self::new();
+
+    registry.register_loader("text-loader".to_string(), Loader::normal_only(text_loader));
+    registry.register_loader(
+      "meow-loader-v1".to_string(),
+      Loader::normal_only(meow_loader_v1),
+    );
+    registry.register_loader(
+      "meow-loader-v2-main".to_string(),
+      Loader::normal_only(meow_loader_v2_main),
+    );
+    registry.register_loader(
+      "meow-extract-template".to_string(),
+      Loader::normal_only(meow_extract_template),
+    );
+    registry.register_loader(
+      "meow-extract-script".to_string(),
+      Loader::normal_only(meow_extract_script),
+    );
+    registry.register_loader(
+      "meow-wrap-template-export".to_string(),
+      Loader::normal_only(meow_wrap_template_export),
+    );
+    registry.register_loader(
+      "meow-wrap-script-export".to_string(),
+      Loader::normal_only(meow_wrap_script_export),
+    );
+    registry.register_loader(
+      "meow-extract-style".to_string(),
+      Loader::normal_only(meow_extract_style),
+    );
+    registry.register_loader(
+      "meow-scope-style".to_string(),
+      Loader::normal_only(meow_scope_style),
+    );
+    registry.register_loader(
+      "meow-wrap-style-export".to_string(),
+      Loader::normal_only(meow_wrap_style_export),
+    );
+    registry.register_loader(
+      "typescript-loader".to_string(),
+      Loader::normal_only(typescript_loader),
+    );
+    registry.register_loader(
+      "meow-v3-pitcher".to_string(),
+      Loader::with_pitch(meow_v3_pitch, meow_v3_pitcher_normal),
+    );
+    registry.register_loader(
+      "meow-loader-v3-main".to_string(),
+      Loader::normal_only(meow_loader_v3_main),
+    );
+
+    registry.add_rule(LoaderRule {
+      test: ".txt".to_string(),
+      resource_query: String::new(),
+      used_loaders: vec!["text-loader".to_string()],
+      enforce: LoaderEnforce::Normal,
+    });
+    registry.add_rule(LoaderRule {
+      test: ".meow-v1".to_string(),
+      resource_query: String::new(),
+      used_loaders: vec!["meow-loader-v1".to_string()],
+      enforce: LoaderEnforce::Normal,
+    });
+    registry.add_rule(LoaderRule {
+      test: ".meow-v2".to_string(),
+      resource_query: String::new(),
+      used_loaders: vec!["meow-loader-v2-main".to_string()],
+      enforce: LoaderEnforce::Normal,
+    });
+    registry.add_rule(LoaderRule {
+      test: ".meow-v3".to_string(),
+      resource_query: String::new(),
+      used_loaders: vec![],
+      enforce: LoaderEnforce::Normal,
+    });
+    registry.add_rule(LoaderRule {
+      test: ".ts".to_string(),
+      resource_query: String::new(),
+      used_loaders: vec!["typescript-loader".to_string()],
+      enforce: LoaderEnforce::Normal,
+    });
+
+    registry
+  }
+
   pub fn set_user_rules(&mut self, rules: Vec<LoaderRule>) {
     self.user_rules = rules;
   }
@@ -118,9 +213,9 @@ impl LoaderRegistry {
     resource_query: &str,
     inline: &InlineRequest,
   ) -> Vec<String> {
-        // loader chain 到底解决什么问题呢？（可以参考 crates/feopack-core/src/compiler/compilation/mod.rs 的注释）
+    // loader chain 到底解决什么问题呢？（可以参考 crates/feopack-core/src/compiler/compilation/mod.rs 的注释）
     // meow-loader-v2 这种 loader 会产生 virtual requests, 可能需要多类 loader 来处理
-    // 本来是需要手动为每种情况制定 loader 的配方（我的老天，我认为这真是一个绝妙的描述💗 
+    // 本来是需要手动为每种情况制定 loader 的配方（我的老天，我认为这真是一个绝妙的描述💗
     // 而 loader chain 要做的就是，根据 virtual request 的情况，自动编排 loader 的配方
     // 与此同时，为了更好地编排，还约定了一套新的语法——我们叫做 inline loader, 也就是在 import 加入特殊的标记
     // (注意，这里标准 rspack/webpack 的 loader 有 pitch 和 normal，但是我们这里暂时还没有这些东西)
@@ -188,7 +283,11 @@ impl LoaderRegistry {
       return loader_chain;
     }
 
-    for enforce in [LoaderEnforce::Pre, LoaderEnforce::Normal, LoaderEnforce::Post] {
+    for enforce in [
+      LoaderEnforce::Pre,
+      LoaderEnforce::Normal,
+      LoaderEnforce::Post,
+    ] {
       if inline.config_override.allows_config_rule(enforce) {
         if let Some(rule) = self.rules.iter().find(|rule| {
           rule.enforce == enforce
@@ -285,11 +384,12 @@ impl LoaderRegistry {
       source: String::new(),
     };
 
-    let initial_source = if let Some(pitched_source) = self.run_pitch(&pitch_context, &loader_chain)? {
-      pitched_source
-    } else {
-      source
-    };
+    let initial_source =
+      if let Some(pitched_source) = self.run_pitch(&pitch_context, &loader_chain)? {
+        pitched_source
+      } else {
+        source
+      };
 
     self.run_normal(
       LoaderContext {

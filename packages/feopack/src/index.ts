@@ -14,6 +14,7 @@ export interface FeopackOptions {
       use: string | string[]
     }>
   }
+  rustPlugins?: string[]
 }
 
 export {

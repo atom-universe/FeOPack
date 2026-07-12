@@ -1,5 +1,5 @@
+use super::super::normal_module_factory::NormalModuleCreateData;
 use super::{Compilation, ResolvedPath};
-use crate::loader::inline_request;
 use crate::loader::{is_js_loader, JsLoaderRequest, LoaderContext};
 use crate::module_graph::Module;
 use crate::swc_compiler::SwcCompiler;
@@ -28,7 +28,6 @@ impl Compilation {
     // 朴素剪枝：当前只处理静态 import，所以 queue + visited 已经能表达最小 module graph 构建。
     let mut visited: HashSet<String> = HashSet::new();
 
-    
     module_id_queue.push_back(entry_module_id);
 
     while let Some(module_id) = module_id_queue.pop_front() {
@@ -50,17 +49,11 @@ impl Compilation {
   async fn build_module(&mut self, module_id: String) -> Result<Vec<String>, String> {
     let context_path = self.options.context.clone();
     let context = Path::new(&context_path);
-    let inline = inline_request::parse_inline_request(&module_id);
-    let (module_resource_path, query) = inline
-      .resource
-      .split_once('?')
-      .map(|(p, q)| (p, format!("?{}", q)))
-      .unwrap_or_else(|| (inline.resource.as_str(), String::new()));
-
-    let module_path = PathBuf::from(module_resource_path);
-    let source = self
-      .load_module_source(&module_path, &query, &inline)
-      .await?;
+    let create_data = self
+      .normal_module_factory
+      .create(module_id, &self.loader_registry);
+    let module_path = create_data.resource_path.clone();
+    let source = self.load_module_source(&create_data).await?;
 
     // 这里每次 build module 都临时创建 SwcCompiler。
     // 当初是为了快速绕开 source_map/引用生命周期问题；坏处是暂时共享不了 sourcemap。
@@ -87,7 +80,9 @@ impl Compilation {
           dep_modules.push(dep.clone());
 
           // external 依赖只记录在 dependencies 中，不进入本地构建队列。
-          if let ResolvedPath::File(resolved_module) = Self::resolve_path(&dep, module_dir, context)? {
+          if let ResolvedPath::File(resolved_module) =
+            Self::resolve_path(&dep, module_dir, context)?
+          {
             dep_module_paths.push(resolved_module.module_id);
           }
         }
@@ -96,22 +91,25 @@ impl Compilation {
 
     // loader 已经在 make 阶段执行过，这里保存 transformed source。
     // code_generation 后续只消费这个 build result，不再重新读文件或重新跑 loader。
-    self.module_sources.insert(module_id.clone(), source);
+    self
+      .module_sources
+      .insert(create_data.module_id.clone(), source);
 
-    let module = Module::new(module_id.clone(), Some(dep_modules));
-    self.module_graph.add_single_module(module_id, module);
+    let module = Module::new(create_data.module_id.clone(), Some(dep_modules));
+    self
+      .module_graph
+      .add_single_module(create_data.module_id, module);
 
     Ok(dep_module_paths)
   }
 
   async fn load_module_source(
     &mut self,
-    module_path: &PathBuf,
-    query: &str,
-    inline: &inline_request::InlineRequest,
+    create_data: &NormalModuleCreateData,
   ) -> Result<String, String> {
-    // 注册后走 normalize，js 和 rust 的 loader chain 合并为一个
-    let loader_chain = self.loader_registry.resolve_chain(module_path, query, inline);
+    let module_path = &create_data.resource_path;
+    let query = &create_data.resource_query;
+    let loader_chain = &create_data.loaders;
     let pitch_context = LoaderContext {
       resource_path: module_path.clone(),
       resource_query: query.to_string(),
@@ -127,7 +125,7 @@ impl Compilation {
     // 因为 pitch 阶段可以 return 短路掉，所以得记录下结束位置
     // 不过一定要注意啊，触发 pitch 短路的那个 loader 本身，不会参与 normal 阶段的运行
     let (source, normal_start_index) = self
-      .run_mixed_pitch_chain(&pitch_context, &loader_chain)
+      .run_mixed_pitch_chain(&pitch_context, loader_chain)
       .await?;
 
     let source = if let Some(source) = source {
@@ -137,7 +135,7 @@ impl Compilation {
     };
 
     self
-      .run_mixed_normal_chain(normal_context, &loader_chain, normal_start_index, source)
+      .run_mixed_normal_chain(normal_context, loader_chain, normal_start_index, source)
       .await
   }
 
@@ -172,7 +170,7 @@ impl Compilation {
             .ok_or_else(|| "JS pitch 短路时缺少 pitched_loader_index".to_string())?;
           let short_circuit_index = segment_start + local_index;
 
-          // 这里 checked_sub(1) 就是 max(0, short_circuit_index - 1) 
+          // 这里 checked_sub(1) 就是 max(0, short_circuit_index - 1)
           let normal_start = short_circuit_index.checked_sub(1);
           return Ok((Some(result.source), normal_start));
         }
@@ -182,7 +180,9 @@ impl Compilation {
 
       // TODO: 说实话这个代码写得很丑陋，后续有机会重构下
       // 最好是这个函数里面只有 run_pitch 和 run_normal 两个主要调用，其他的代码都放到外面或者别的文件里面
-      let pitch_result = self.loader_registry.run_pitch(context, &[loader_name.clone()])?;
+      let pitch_result = self
+        .loader_registry
+        .run_pitch(context, &[loader_name.clone()])?;
       if let Some(source) = pitch_result {
         let normal_start = index.checked_sub(1);
         return Ok((Some(source), normal_start));
@@ -225,11 +225,10 @@ impl Compilation {
         pending_js_loaders.clear();
       }
 
-      cur_source = self.loader_registry.run_normal(
-        context.clone(),
-        &[loader_name.clone()],
-        cur_source,
-      )?;
+      cur_source =
+        self
+          .loader_registry
+          .run_normal(context.clone(), &[loader_name.clone()], cur_source)?;
     }
 
     if !pending_js_loaders.is_empty() {
@@ -251,7 +250,11 @@ impl Compilation {
       .as_ref()
       .ok_or_else(|| "JS loader runner 初始化失败".to_string())?;
 
-    let resource = format!("{}{}", context.resource_path.display(), context.resource_query);
+    let resource = format!(
+      "{}{}",
+      context.resource_path.display(),
+      context.resource_query
+    );
 
     runner(JsLoaderRequest {
       loader_state: "pitching".to_string(),
@@ -279,7 +282,11 @@ impl Compilation {
 
     // 倒序扫描 normal 链时，收集到的连续 JS 段顺序是反的；交给 Node 前要翻回原始链顺序。
     let js_loaders = pending_js_loaders.iter().rev().cloned().collect();
-    let resource = format!("{}{}", context.resource_path.display(), context.resource_query);
+    let resource = format!(
+      "{}{}",
+      context.resource_path.display(),
+      context.resource_query
+    );
 
     let result = runner(JsLoaderRequest {
       loader_state: "normal".to_string(),

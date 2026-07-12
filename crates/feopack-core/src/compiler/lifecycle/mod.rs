@@ -8,3 +8,4 @@ mod done;
 mod emit;
 mod initialize;
 mod run;
+mod should_emit;

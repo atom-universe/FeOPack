@@ -21,6 +21,7 @@ export interface RawOptions {
   context: string
   output: Output
   module?: ModuleConfig
+  rustPlugins?: Array<string>
 }
 export declare class Rspack {
   constructor(options: RawOptions, jsRunner?: (ctx: JsLoaderContextInput) => Promise<JsLoaderResultOutput>)

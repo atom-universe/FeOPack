@@ -56,7 +56,11 @@ impl Rspack {
       module_rules,
     };
 
-    let compiler = Compiler::new(compilation_options);
+    let mut compiler = Compiler::new(compilation_options);
+
+    for plugin_name in options.rust_plugins.unwrap_or_default() {
+      apply_builtin_plugin(&plugin_name, &mut compiler).map_err(Error::from_reason)?;
+    }
 
     let js_runner = js_runner
       .map(|runner_fn| -> Result<Arc<JsLoaderRunnerTsFn>> {

@@ -29,4 +29,5 @@ pub struct RawOptions {
   pub context: String,
   pub output: Output,
   pub module: Option<ModuleConfig>,
+  pub rust_plugins: Option<Vec<String>>,
 }

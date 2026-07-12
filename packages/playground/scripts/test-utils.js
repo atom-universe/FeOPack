@@ -27,6 +27,10 @@ function normalizeConfig(config, parent) {
 }
 
 function executeDist(config) {
+  if (config.__skipExecute) {
+    return;
+  }
+
   const outputPath = config.output.path || path.join(config.context, 'dist');
   const filename = config.output.filename || 'main.js';
   const bundlePath = path.join(outputPath, filename);
@@ -65,8 +69,15 @@ async function run(filter = []) {
         tasks.push(async () => {
           delete require.cache[require.resolve(fullPath)];
           const config = normalizeConfig(require(fullPath), parent);
+          fs.rmSync(config.output.path, { recursive: true, force: true });
           await feopack(config).run();
           executeDist(config);
+
+          const verifyPath = path.join(parent, 'verify.js');
+          if (fs.existsSync(verifyPath)) {
+            delete require.cache[require.resolve(verifyPath)];
+            require(verifyPath)(config);
+          }
         });
       }
     }

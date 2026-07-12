@@ -32,5 +32,6 @@ export const getRawOptions = (options: FeopackOptions) => {
     mode: options.mode || 'production',
     output: options.output,
     module: moduleRules.length > 0 ? { rules: moduleRules } : undefined,
+    rustPlugins: options.rustPlugins,
   }
 }

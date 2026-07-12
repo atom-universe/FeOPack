@@ -2,10 +2,13 @@ pub mod compilation;
 mod emit;
 mod hooks;
 mod lifecycle;
+mod normal_module_factory;
+mod plugin;
 
 use crate::loader::JsLoaderRunner;
 use compilation::{Compilation, CompilationOptions};
 use hooks::CompilerHooks;
+pub use plugin::{apply_builtin_plugin, Plugin};
 use std::result::Result;
 
 pub struct Compiler {
@@ -50,6 +53,10 @@ impl Compiler {
     self.compilation.make().await?;
     self.compilation.seal().await?;
     self.after_compile()?;
+    if !self.should_emit()? {
+      println!("[rust compiler lifecycle] should_emit returned false, skip emit");
+      return Ok(());
+    }
     self.emit_assets().await?;
     Ok(())
   }
@@ -130,5 +137,17 @@ mod tests {
         Path::new("/tmp/feopack-test/dist/main.js").to_path_buf()
       ))
     );
+  }
+
+  #[test]
+  fn should_emit_bail_hook_can_skip_emit() {
+    let mut compiler = test_compiler();
+
+    compiler
+      .hooks_mut()
+      .should_emit
+      .tap("skip-emit", |_| Ok(Some(false)));
+
+    assert!(!compiler.should_emit().expect("should_emit should pass"));
   }
 }

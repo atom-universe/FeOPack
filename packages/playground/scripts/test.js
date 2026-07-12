@@ -7,8 +7,11 @@ const filteredPkg = process.argv.slice(2);
 
 console.log('测试目标', filteredPkg);
 
-run(filteredPkg).catch(error => {
-  console.error(error);
-  process.exit(1);
-});
-
+run(filteredPkg)
+  .then(() => {
+    process.exit(0);
+  })
+  .catch(error => {
+    console.error(error);
+    process.exit(1);
+  });

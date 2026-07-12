@@ -2,16 +2,9 @@ mod make;
 mod resolve;
 mod seal;
 
+use super::normal_module_factory::NormalModuleFactory;
 use crate::loader::inline_request::InlineRequest;
-use crate::loader::meow_loader_v1::meow_loader_v1;
-use crate::loader::meow_loader_v2::{
-  meow_extract_script, meow_extract_style, meow_extract_template, meow_loader_v2_main,
-  meow_scope_style, meow_wrap_script_export, meow_wrap_style_export, meow_wrap_template_export,
-};
-use crate::loader::meow_loader_v3::{meow_loader_v3_main, meow_v3_pitch, meow_v3_pitcher_normal};
-use crate::loader::text_loader::text_loader;
-use crate::loader::typescript_loader::typescript_loader;
-use crate::loader::{JsLoaderRunner, Loader, LoaderEnforce, LoaderRegistry, LoaderRule};
+use crate::loader::{JsLoaderRunner, LoaderEnforce, LoaderRegistry, LoaderRule};
 use crate::module_graph::ModuleGraph;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -90,6 +83,7 @@ pub struct Compilation {
   pub(crate) module_sources: HashMap<String, String>,
   pub(crate) file_source_cache: HashMap<PathBuf, String>,
   pub(crate) loader_registry: LoaderRegistry,
+  pub(crate) normal_module_factory: NormalModuleFactory,
   #[allow(dead_code)]
   pub(crate) js_loader_runner: Option<JsLoaderRunner>,
 }
@@ -97,7 +91,7 @@ pub struct Compilation {
 impl Compilation {
   pub fn new(options: CompilationOptions, js_loader_runner: Option<JsLoaderRunner>) -> Self {
     println!("\n\nCompilation new: {:?}\n\n", options);
-    let mut loader_registry = LoaderRegistry::new();
+    let mut loader_registry = LoaderRegistry::with_builtin_defaults();
 
     let user_rules = options
       .module_rules
@@ -111,146 +105,6 @@ impl Compilation {
       .collect();
     loader_registry.set_user_rules(user_rules);
 
-    loader_registry.register_loader("text-loader".to_string(), Loader::normal_only(text_loader));
-    loader_registry.register_loader(
-      "meow-loader-v1".to_string(),
-      Loader::normal_only(meow_loader_v1),
-    );
-    loader_registry.register_loader(
-      "meow-loader-v2-main".to_string(),
-      Loader::normal_only(meow_loader_v2_main),
-    );
-    loader_registry.register_loader(
-      "meow-extract-template".to_string(),
-      Loader::normal_only(meow_extract_template),
-    );
-    loader_registry.register_loader(
-      "meow-extract-script".to_string(),
-      Loader::normal_only(meow_extract_script),
-    );
-    loader_registry.register_loader(
-      "meow-wrap-template-export".to_string(),
-      Loader::normal_only(meow_wrap_template_export),
-    );
-    loader_registry.register_loader(
-      "meow-wrap-script-export".to_string(),
-      Loader::normal_only(meow_wrap_script_export),
-    );
-    loader_registry.register_loader(
-      "meow-extract-style".to_string(),
-      Loader::normal_only(meow_extract_style),
-    );
-    loader_registry.register_loader(
-      "meow-scope-style".to_string(),
-      Loader::normal_only(meow_scope_style),
-    );
-    loader_registry.register_loader(
-      "meow-wrap-style-export".to_string(),
-      Loader::normal_only(meow_wrap_style_export),
-    );
-    loader_registry.register_loader(
-      "typescript-loader".to_string(),
-      Loader::normal_only(typescript_loader),
-    );
-
-    // meow-v3：仅注册 pitcher + main；extract/wrap/scope 复用上方 v2 同名 loader
-    loader_registry.register_loader(
-      "meow-v3-pitcher".to_string(),
-      Loader::with_pitch(meow_v3_pitch, meow_v3_pitcher_normal),
-    );
-    loader_registry.register_loader(
-      "meow-loader-v3-main".to_string(),
-      Loader::normal_only(meow_loader_v3_main),
-    );
-
-    loader_registry.add_rule(LoaderRule {
-      test: ".txt".to_string(),
-      resource_query: String::new(),
-      used_loaders: vec!["text-loader".to_string()],
-      enforce: LoaderEnforce::Normal,
-    });
-    loader_registry.add_rule(LoaderRule {
-      test: ".meow-v1".to_string(),
-      resource_query: String::new(),
-      used_loaders: vec!["meow-loader-v1".to_string()],
-      enforce: LoaderEnforce::Normal,
-    });
-
-    // inline loader 之前：每个 virtual request 都要在这里手写一条 resourceQuery rule。
-    // 缺点：lang=ts / lang=js、scoped / 非 scoped 各要一条，和 meow-loader 强耦合，typescript-loader 也得重复写进 rule。
-    //
-    // 现在：子 block 的 loader 链写在 meow-loader-v2-main 生成的 import 字符串里，例如：
-    //   import __script__ from '-!meow-wrap-script-export!typescript-loader!meow-extract-script!./index.meow-v2?type=script&lang=ts';
-    // 好处：
-    //   1. 这里只需注册 .meow-v2 主请求一条 rule
-    //   2. typescript-loader 只作为 inline 复用，不必为每种 block 重复注册
-    //   3. 和 webpack 的 `-!loader!resource` 机制对齐，后续 pitch 可以在此基础上继续演进
-    //
-    // loader_registry.add_rule(LoaderRule {
-    //   test: ".meow-v2".to_string(),
-    //   resource_query: "?type=script&lang=ts".to_string(),
-    //   used_loaders: vec![
-    //     "meow-wrap-script-export".to_string(),
-    //     "typescript-loader".to_string(),
-    //     "meow-extract-script".to_string(),
-    //   ],
-    // });
-    // loader_registry.add_rule(LoaderRule {
-    //   test: ".meow-v2".to_string(),
-    //   resource_query: "?type=script&lang=js".to_string(),
-    //   used_loaders: vec![
-    //     "meow-wrap-script-export".to_string(),
-    //     "meow-extract-script".to_string(),
-    //   ],
-    // });
-    // loader_registry.add_rule(LoaderRule {
-    //   test: ".meow-v2".to_string(),
-    //   resource_query: "?type=style&scoped".to_string(),
-    //   used_loaders: vec![
-    //     "meow-wrap-style-export".to_string(),
-    //     "meow-scope-style".to_string(),
-    //     "meow-extract-style".to_string(),
-    //   ],
-    // });
-    // loader_registry.add_rule(LoaderRule {
-    //   test: ".meow-v2".to_string(),
-    //   resource_query: "?type=style".to_string(),
-    //   used_loaders: vec![
-    //     "meow-wrap-style-export".to_string(),
-    //     "meow-extract-style".to_string(),
-    //   ],
-    // });
-    // loader_registry.add_rule(LoaderRule {
-    //   test: ".meow-v2".to_string(),
-    //   resource_query: "?type=template".to_string(),
-    //   used_loaders: vec![
-    //     "meow-wrap-template-export".to_string(),
-    //     "meow-extract-template".to_string(),
-    //   ],
-    // });
-    loader_registry.add_rule(LoaderRule {
-      test: ".meow-v2".to_string(),
-      resource_query: String::new(),
-      used_loaders: vec!["meow-loader-v2-main".to_string()],
-      enforce: LoaderEnforce::Normal,
-    });
-
-    // meow-v3（vue-loader 风格）：拼链在 resolve_meow_v3_chain 里完成，不再为每种 query 写 rule
-    // 这里保留一条 .meow-v3 仅作占位/对照；实际匹配与拼链在 LoaderRegistry 里处理
-    loader_registry.add_rule(LoaderRule {
-      test: ".meow-v3".to_string(),
-      resource_query: String::new(),
-      used_loaders: vec![],
-      enforce: LoaderEnforce::Normal,
-    });
-
-    loader_registry.add_rule(LoaderRule {
-      test: ".ts".to_string(),
-      resource_query: String::new(),
-      used_loaders: vec!["typescript-loader".to_string()],
-      enforce: LoaderEnforce::Normal,
-    });
-
     Self {
       options: options.clone(),
       module_graph: ModuleGraph::new(),
@@ -259,6 +113,7 @@ impl Compilation {
       module_sources: HashMap::new(),
       file_source_cache: HashMap::new(),
       loader_registry,
+      normal_module_factory: NormalModuleFactory::new(),
       js_loader_runner,
     }
   }
