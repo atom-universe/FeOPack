@@ -103,9 +103,9 @@ pnpm test chunk/basic
 | JS Loader Bridge | ✅ | ✅ | 已支持从 Rust 调用 Node 侧 JS loader runner |
 | Loader pitch / normal | ✅ | ✅ | Feopack 已支持简化版 pitch / normal 执行流 |
 | Inline Loader Request | ✅ | ✅ | 已支持类似 `-!loader!resource` 的基础解析 |
-| Plugin / Hook 系统 | ✅ | 🚧 | Feopack 目前只有 compiler lifecycle 和 hook 占位结构 |
+| Plugin 基础机制 | ✅ | 🚧 | Feopack 目前只有 compiler lifecycle 和 hook 占位结构，后续会补 tap 注册与调度 |
 | JS Plugin 兼容 | ✅ | 🚧 | 后续计划支持 `plugin.apply(compiler)` 这一类入口 |
-| Compilation Hooks | ✅ | 🚧 | 例如 `processAssets`，后续按具体 case 增量实现 |
+| Compilation 级 Hooks | ✅ | 🚧 | 比 compiler hooks 更贴近 module/chunk/assets，例如 `processAssets` |
 | Watch Mode | ✅ | 🚧 | 暂未实现，属于后续 mini rspack 能力 |
 | Incremental Rebuild | ✅ | 🚧 | 暂未实现 |
 | HMR | ✅ | 🚧 | 暂未实现 |
