@@ -1,16 +1,16 @@
-use super::SyncSeriesHook;
+use super::{AssetEmittedContext, SyncSeriesHook};
 
 pub(crate) struct CompilerHooks {
-  pub(crate) initialize: SyncSeriesHook,
-  pub(crate) before_run: SyncSeriesHook,
-  pub(crate) run: SyncSeriesHook,
-  pub(crate) before_compile: SyncSeriesHook,
-  pub(crate) compile: SyncSeriesHook,
-  pub(crate) after_compile: SyncSeriesHook,
-  pub(crate) emit: SyncSeriesHook,
-  pub(crate) asset_emitted: SyncSeriesHook,
-  pub(crate) after_emit: SyncSeriesHook,
-  pub(crate) done: SyncSeriesHook,
+  pub(crate) initialize: SyncSeriesHook<()>,
+  pub(crate) before_run: SyncSeriesHook<()>,
+  pub(crate) run: SyncSeriesHook<()>,
+  pub(crate) before_compile: SyncSeriesHook<()>,
+  pub(crate) compile: SyncSeriesHook<()>,
+  pub(crate) after_compile: SyncSeriesHook<()>,
+  pub(crate) emit: SyncSeriesHook<()>,
+  pub(crate) asset_emitted: SyncSeriesHook<AssetEmittedContext>,
+  pub(crate) after_emit: SyncSeriesHook<()>,
+  pub(crate) done: SyncSeriesHook<()>,
 }
 
 impl Default for CompilerHooks {

@@ -1,5 +1,6 @@
 use super::super::Compiler;
 use crate::compiler::compilation::GeneratedAsset;
+use crate::compiler::hooks::AssetEmittedContext;
 use std::path::Path;
 
 impl Compiler {
@@ -13,6 +14,9 @@ impl Compiler {
       asset.filename,
       target_path.display()
     );
-    self.hooks.asset_emitted.call()
+    self.hooks.asset_emitted.call(&AssetEmittedContext {
+      filename: asset.filename.clone(),
+      target_path: target_path.to_path_buf(),
+    })
   }
 }
