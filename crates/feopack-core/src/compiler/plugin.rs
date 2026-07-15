@@ -1,15 +1,29 @@
 use super::Compiler;
+use super::compilation::CompilationOptions;
+use super::hooks::CompilerHooks;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 pub trait Plugin {
-  fn apply(&self, compiler: &mut Compiler) -> Result<(), String>;
+  fn apply(&self, context: &mut PluginApplyContext) -> Result<(), String>;
+}
+
+pub struct PluginApplyContext<'a> {
+  pub(crate) compiler_hooks: &'a mut CompilerHooks,
+  pub(crate) compiler_options: &'a CompilationOptions,
 }
 
 pub fn apply_builtin_plugin(name: &str, compiler: &mut Compiler) -> Result<(), String> {
+  let mut context = PluginApplyContext {
+    compiler_hooks: &mut compiler.hooks,
+    compiler_options: &compiler.options,
+  };
+
   match name {
-    "trace-lifecycle" => TraceLifecyclePlugin.apply(compiler),
-    "skip-emit" => SkipEmitPlugin.apply(compiler),
+    "traceLifecycle" | "trace-lifecycle" | "TraceLifecyclePlugin" => {
+      TraceLifecyclePlugin.apply(&mut context)
+    }
+    "skipEmit" | "skip-emit" | "SkipEmitPlugin" => SkipEmitPlugin.apply(&mut context),
     _ => Err(format!("unknown feopack rust plugin: {}", name)),
   }
 }
@@ -34,8 +48,9 @@ impl TraceLifecyclePlugin {
 }
 
 impl Plugin for TraceLifecyclePlugin {
-  fn apply(&self, compiler: &mut Compiler) -> Result<(), String> {
-    let log_file = Arc::new(PathBuf::from(&compiler.options.output.path).join("feopack-hooks.log"));
+  fn apply(&self, context: &mut PluginApplyContext) -> Result<(), String> {
+    let log_file =
+      Arc::new(PathBuf::from(&context.compiler_options.output.path).join("feopack-hooks.log"));
     match std::fs::remove_file(log_file.as_ref()) {
       Ok(()) => {}
       Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -43,35 +58,35 @@ impl Plugin for TraceLifecyclePlugin {
     }
 
     let before_run_log = Arc::clone(&log_file);
-    compiler
-      .hooks_mut()
+    context
+      .compiler_hooks
       .before_run
       .tap("TraceLifecyclePlugin", move |_| {
-        Self::append_line(&before_run_log, "before_run")
+        Self::append_line(&before_run_log, "beforeRun")
       });
 
     let emit_log = Arc::clone(&log_file);
-    compiler
-      .hooks_mut()
+    context
+      .compiler_hooks
       .emit
       .tap("TraceLifecyclePlugin", move |_| {
         Self::append_line(&emit_log, "emit")
       });
 
     let asset_emitted_log = Arc::clone(&log_file);
-    compiler
-      .hooks_mut()
+    context
+      .compiler_hooks
       .asset_emitted
       .tap("TraceLifecyclePlugin", move |ctx| {
         Self::append_line(
           &asset_emitted_log,
-          &format!("asset_emitted {}", ctx.filename),
+          &format!("assetEmitted {}", ctx.filename),
         )
       });
 
     let done_log = Arc::clone(&log_file);
-    compiler
-      .hooks_mut()
+    context
+      .compiler_hooks
       .done
       .tap("TraceLifecyclePlugin", move |_| {
         Self::append_line(&done_log, "done")
@@ -84,9 +99,9 @@ impl Plugin for TraceLifecyclePlugin {
 struct SkipEmitPlugin;
 
 impl Plugin for SkipEmitPlugin {
-  fn apply(&self, compiler: &mut Compiler) -> Result<(), String> {
-    compiler
-      .hooks_mut()
+  fn apply(&self, context: &mut PluginApplyContext) -> Result<(), String> {
+    context
+      .compiler_hooks
       .should_emit
       .tap("SkipEmitPlugin", |_| Ok(Some(false)));
     Ok(())

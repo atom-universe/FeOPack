@@ -18,10 +18,11 @@ pub mod js_bridge;
 pub mod meow_loader_v1;
 pub mod meow_loader_v2;
 pub mod meow_loader_v3;
+pub mod runner;
 pub mod text_loader;
 pub mod typescript_loader;
 
-pub use js_bridge::{is_js_loader, JsLoaderRequest, JsLoaderRunResult, JsLoaderRunner};
+pub use js_bridge::{JsLoaderRequest, JsLoaderRunResult, JsLoaderRunner, is_js_loader};
 
 // test: '/\.test$/',
 // use_loaders: [
