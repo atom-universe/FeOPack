@@ -14,7 +14,7 @@ impl Compiler {
       asset.filename,
       target_path.display()
     );
-    self.hooks.asset_emitted.call(&AssetEmittedContext {
+    self.hooks().asset_emitted.call(&AssetEmittedContext {
       filename: asset.filename.clone(),
       target_path: target_path.to_path_buf(),
     })

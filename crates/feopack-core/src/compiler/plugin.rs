@@ -4,7 +4,7 @@ use super::hooks::CompilerHooks;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub trait Plugin {
+pub trait Plugin: Send + Sync {
   fn apply(&self, context: &mut PluginApplyContext) -> Result<(), String>;
 }
 
@@ -13,19 +13,60 @@ pub struct PluginApplyContext<'a> {
   pub(crate) compiler_options: &'a CompilationOptions,
 }
 
-pub fn apply_builtin_plugin(name: &str, compiler: &mut Compiler) -> Result<(), String> {
-  let mut context = PluginApplyContext {
-    compiler_hooks: &mut compiler.hooks,
-    compiler_options: &compiler.options,
-  };
+#[derive(Default)]
+pub(crate) struct PluginDriver {
+  compiler_hooks: CompilerHooks,
+  #[allow(dead_code)]
+  plugins: Vec<Box<dyn Plugin>>,
+}
 
+impl PluginDriver {
+  pub(crate) fn compiler_hooks(&self) -> &CompilerHooks {
+    &self.compiler_hooks
+  }
+
+  pub(crate) fn compiler_hooks_mut(&mut self) -> &mut CompilerHooks {
+    &mut self.compiler_hooks
+  }
+
+  pub(crate) fn apply_builtin_plugin(
+    &mut self,
+    name: &str,
+    compiler_options: &CompilationOptions,
+  ) -> Result<(), String> {
+    let plugin = create_builtin_plugin(name)?;
+    self.apply_plugin(plugin, compiler_options)
+  }
+
+  fn apply_plugin(
+    &mut self,
+    plugin: Box<dyn Plugin>,
+    compiler_options: &CompilationOptions,
+  ) -> Result<(), String> {
+    let mut context = PluginApplyContext {
+      compiler_hooks: &mut self.compiler_hooks,
+      compiler_options,
+    };
+    plugin.apply(&mut context)?;
+    self.plugins.push(plugin);
+    Ok(())
+  }
+}
+
+fn create_builtin_plugin(name: &str) -> Result<Box<dyn Plugin>, String> {
   match name {
     "traceLifecycle" | "trace-lifecycle" | "TraceLifecyclePlugin" => {
-      TraceLifecyclePlugin.apply(&mut context)
+      Ok(Box::new(TraceLifecyclePlugin))
     }
-    "skipEmit" | "skip-emit" | "SkipEmitPlugin" => SkipEmitPlugin.apply(&mut context),
+    "skipEmit" | "skip-emit" | "SkipEmitPlugin" => Ok(Box::new(SkipEmitPlugin)),
     _ => Err(format!("unknown feopack rust plugin: {}", name)),
   }
+}
+
+pub fn apply_builtin_plugin(name: &str, compiler: &mut Compiler) -> Result<(), String> {
+  compiler
+    .plugin_driver
+    .apply_builtin_plugin(name, &compiler.options)
 }
 
 struct TraceLifecyclePlugin;

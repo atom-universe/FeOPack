@@ -8,14 +8,15 @@ mod plugin;
 use crate::loader::JsLoaderRunner;
 use compilation::{Compilation, CompilationOptions};
 use hooks::CompilerHooks;
-pub use plugin::{apply_builtin_plugin, Plugin};
+use plugin::PluginDriver;
+pub use plugin::{Plugin, apply_builtin_plugin};
 use std::result::Result;
 
 pub struct Compiler {
   compilation: Compilation,
   options: CompilationOptions,
   js_loader_runner: Option<JsLoaderRunner>,
-  hooks: CompilerHooks,
+  plugin_driver: PluginDriver,
 }
 
 impl Compiler {
@@ -24,7 +25,7 @@ impl Compiler {
       compilation: Compilation::new(options.clone(), None),
       options,
       js_loader_runner: None,
-      hooks: CompilerHooks::default(),
+      plugin_driver: PluginDriver::default(),
     }
   }
 
@@ -32,9 +33,13 @@ impl Compiler {
     self.js_loader_runner = runner;
   }
 
+  pub(crate) fn hooks(&self) -> &CompilerHooks {
+    self.plugin_driver.compiler_hooks()
+  }
+
   #[allow(dead_code)]
   pub(crate) fn hooks_mut(&mut self) -> &mut CompilerHooks {
-    &mut self.hooks
+    self.plugin_driver.compiler_hooks_mut()
   }
 
   pub async fn build(&mut self) -> Result<(), String> {
@@ -64,8 +69,8 @@ impl Compiler {
 
 #[cfg(test)]
 mod tests {
-  use super::compilation::{CompilationOptions, Output};
   use super::Compiler;
+  use super::compilation::{CompilationOptions, Output};
   use crate::compiler::compilation::GeneratedAsset;
   use std::path::Path;
   use std::sync::{Arc, Mutex};
