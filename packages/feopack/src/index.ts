@@ -1,5 +1,11 @@
 import { Compiler } from './Compiler'
 
+export type FeopackPlugin =
+  | ((compiler: Compiler) => void)
+  | {
+      apply(compiler: Compiler): void
+    }
+
 export interface FeopackOptions {
   context: string
   entry: string | string[] | Record<string, string | string[]>
@@ -15,6 +21,7 @@ export interface FeopackOptions {
     }>
   }
   rustPlugins?: string[]
+  plugins?: FeopackPlugin[]
 }
 
 export {

@@ -8,6 +8,7 @@ import {
 } from './loader-runner/dispatcher'
 import { runJsLoaders } from './loader-runner/snapshot'
 import { JsLoaderState } from './loader-runner/types'
+import { CompilerHooks, createCompilerHooks } from './hooks'
 
 export class Compiler {
   #inner?: binding.Rspack // Rust 那一侧对应的 Compiler
@@ -15,11 +16,28 @@ export class Compiler {
   options: FeopackOptions
   context: string
   compilation?: Compilation
+  hooks: CompilerHooks
+  webpack: Record<string, never>
+  rspack: Record<string, never>
 
   constructor(options: FeopackOptions) {
     this.context = options.context
     this.options = options
+    this.hooks = createCompilerHooks()
+    this.webpack = {}
+    this.rspack = {}
     registerJsLoaderDispatcher(createDefaultJsLoaderDispatcher())
+    this.#applyPlugins()
+  }
+
+  #applyPlugins() {
+    for (const plugin of this.options.plugins ?? []) {
+      if (typeof plugin === 'function') {
+        ;(plugin as (this: Compiler, compiler: Compiler) => void).call(this, this)
+        continue
+      }
+      plugin.apply(this)
+    }
   }
 
   #getInner(): binding.Rspack {
@@ -64,11 +82,27 @@ export class Compiler {
   }
 
   async #build() {
+    const compilationStub = { compiler: this }
+
+    await this.hooks.beforeRun.promise(this)
+    await this.hooks.beforeCompile.promise({})
+    await this.hooks.make.promise(compilationStub)
+    await this.hooks.compilation.promise(compilationStub)
+
     // rust, 启动！
     const inner = this.#getInner()
-    await inner.build()
-    // TODO: 目前没有插件的部分，所以暂时用不到 nodejs 的 compilation
-    // this.compilation = new Compilation(this, inner)
+    try {
+      await inner.build()
+    } catch (err) {
+      this.hooks.failed.call(err)
+      throw err
+    }
+
+    this.compilation = new Compilation(this, inner)
+    await this.hooks.afterEmit.promise(this.compilation)
+    const stats = this.compilation.getStats()
+    await this.hooks.done.promise(stats)
+    this.hooks.afterDone.call(stats)
   }
 
   async compile() {

@@ -150,6 +150,9 @@ importers:
       webpack-dev-server:
         specifier: ^5.0.4
         version: 5.2.2(webpack@5.104.1)
+      webpack-shell-plugin-next:
+        specifier: 2.3.3
+        version: 2.3.3(webpack@5.104.1)
       ws:
         specifier: ^8.16.0
         version: 8.18.3
@@ -3144,6 +3147,11 @@ packages:
         optional: true
       webpack-cli:
         optional: true
+
+  webpack-shell-plugin-next@2.3.3:
+    resolution: {integrity: sha512-3TMY32HKeEiaKqv6o6MSM3sN/G2HgtPWldINI5YkTyY31XB7I/awarZICBoSusbCYwW13oowG+Xrw9zg3mfT7w==}
+    peerDependencies:
+      webpack: ^5.18.0
 
   webpack-sources@3.3.3:
     resolution: {integrity: sha512-yd1RBzSGanHkitROoPFd6qsrxt+oFhg/129YzheDGqeustzX0vTZJZsSsQjVQC4yzBQ56K55XU8gaNCtIzOnTg==}
@@ -6164,6 +6172,10 @@ snapshots:
       - debug
       - supports-color
       - utf-8-validate
+
+  webpack-shell-plugin-next@2.3.3(webpack@5.104.1):
+    dependencies:
+      webpack: 5.104.1
 
   webpack-sources@3.3.3: {}
 
