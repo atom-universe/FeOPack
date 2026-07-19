@@ -24,6 +24,9 @@ export interface FeopackOptions {
   plugins?: FeopackPlugin[]
 }
 
+export { Watching } from './Watching'
+export type { WatchHandler, WatchOptions } from './Watching'
+
 export {
   runLoaders,
   runLoadersAsync,

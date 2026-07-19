@@ -76,7 +76,7 @@ async function run(filter = []) {
           const verifyPath = path.join(parent, 'verify.js');
           if (fs.existsSync(verifyPath)) {
             delete require.cache[require.resolve(verifyPath)];
-            require(verifyPath)(config);
+            await require(verifyPath)(config);
           }
         });
       }

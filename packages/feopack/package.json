@@ -18,9 +18,11 @@
   "license": "ISC",
   "packageManager": "pnpm@10.26.0",
   "dependencies": {
-    "@feopack/binding": "workspace:*"
+    "@feopack/binding": "workspace:*",
+    "watchpack": "2.4.4"
   },
   "devDependencies": {
-    "@types/node": "^25.0.3"
+    "@types/node": "^25.0.3",
+    "@types/watchpack": "2.4.5"
   }
 }

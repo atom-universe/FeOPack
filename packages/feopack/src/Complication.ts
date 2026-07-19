@@ -26,6 +26,10 @@ export class Compilation {
     return new Stats(this)
   }
 
+  get fileDependencies(): ReadonlySet<string> {
+    return new Set(this.#inner.getFileDependencies())
+  }
+
   __internal_getInner(): binding.Rspack {
     return this.#inner
   }

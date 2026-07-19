@@ -79,7 +79,7 @@ pnpm test
 pnpm test chunk/basic
 ```
 
-产物会出现在各个 case 目录下的 dist（如未配置输出目录）中，当前阶段只支持人工观察验证
+产物会出现在各个 case 目录下的 dist（如未配置输出目录）中。大部分 case 仍以人工观察为主；如果 case 目录包含 `verify.js`，playground runner 会在构建后执行它，完成该 case 的集成断言。
 
 > 虽然不是方便，但是够用了
 
@@ -105,7 +105,7 @@ pnpm test chunk/basic
 | Inline Loader Request | ✅ | ✅ | 已支持类似 `-!loader!resource` 的基础解析 |
 | Plugin 基础机制 | ✅ | ✅ | 已有简化的 `Plugin`、`PluginDriver`、compiler hooks 和 tap 调度 |
 | JS Plugin 兼容 | ✅ | ✅ | 支持 `plugin.apply(compiler)` 和部分常用 compiler hooks，已跑通一个 npm plugin case |
-| Watch Mode | ✅ | 🚧 | 下一阶段：监听文件变化并复用 Compiler 发起新一轮 compilation |
+| Watch Mode | ✅ | ✅ | 使用 Watchpack 监听 compilation 的文件依赖；当前每次变化仍执行完整构建 |
 | Incremental Rebuild | ✅ | 🚧 | 暂未实现 |
 | Compilation 级 Hooks | ✅ | 🚧 | 等真实 plugin case 需要时再补，例如 `processAssets` |
 | HMR | ✅ | 🚧 | 暂未实现 |

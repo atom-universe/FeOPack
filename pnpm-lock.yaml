@@ -67,10 +67,16 @@ importers:
       '@feopack/binding':
         specifier: workspace:*
         version: link:../../crates/node-binding
+      watchpack:
+        specifier: 2.4.4
+        version: 2.4.4
     devDependencies:
       '@types/node':
         specifier: ^25.0.3
         version: 25.0.3
+      '@types/watchpack':
+        specifier: 2.4.5
+        version: 2.4.5
 
   packages/feopack-cli:
     dependencies:
@@ -1084,6 +1090,9 @@ packages:
   '@types/fs-extra@11.0.4':
     resolution: {integrity: sha512-yTbItCNreRooED33qjunPthRcSjERP1r4MqCZc7wv0u2sUkzTFp45tgUfS5+r7FrZPdmCCNflLhVSP/o+SemsQ==}
 
+  '@types/graceful-fs@4.1.9':
+    resolution: {integrity: sha512-olP3sd1qOEe5dXTSaFvQG+02VdRXcdytWLAZsAq1PecU8uqQAhkrnbli7DagjtXKW/Bl7YJbUsa8MPcuc8LHEQ==}
+
   '@types/http-errors@2.0.5':
     resolution: {integrity: sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==}
 
@@ -1128,6 +1137,9 @@ packages:
 
   '@types/sockjs@0.3.36':
     resolution: {integrity: sha512-MK9V6NzAS1+Ud7JV9lJLFqW85VbC9dq3LmwZCuBe4wBDgKC0Kj/jd8Xl+nSviU+Qc3+m7umHHyHg//2KSa0a0Q==}
+
+  '@types/watchpack@2.4.5':
+    resolution: {integrity: sha512-8CarnGOIYYRL342jwQyHrGwz4vCD3y5uwwYmzQVzT2Z24DqSd6wwBva6m0eNJX4S5pVmrx9xUEbOsOoqBVhWsg==}
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
@@ -4130,6 +4142,10 @@ snapshots:
       '@types/jsonfile': 6.1.4
       '@types/node': 25.0.3
 
+  '@types/graceful-fs@4.1.9':
+    dependencies:
+      '@types/node': 25.0.3
+
   '@types/http-errors@2.0.5': {}
 
   '@types/http-proxy@1.17.17':
@@ -4179,6 +4195,11 @@ snapshots:
 
   '@types/sockjs@0.3.36':
     dependencies:
+      '@types/node': 25.0.3
+
+  '@types/watchpack@2.4.5':
+    dependencies:
+      '@types/graceful-fs': 4.1.9
       '@types/node': 25.0.3
 
   '@types/ws@8.18.1':

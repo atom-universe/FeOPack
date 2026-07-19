@@ -110,4 +110,9 @@ impl Rspack {
       .await
       .map_err(|e| Error::from_reason(e))
   }
+
+  #[napi]
+  pub fn get_file_dependencies(&self) -> Vec<String> {
+    self.compiler.file_dependencies()
+  }
 }

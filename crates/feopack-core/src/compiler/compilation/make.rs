@@ -1,7 +1,7 @@
 use super::super::normal_module_factory::NormalModuleCreateData;
 use super::{Compilation, ResolvedPath};
-use crate::loader::LoaderContext;
 use crate::loader::runner::LoaderRunner;
+use crate::loader::LoaderContext;
 use crate::module_graph::Module;
 use crate::swc_compiler::SwcCompiler;
 use std::collections::{HashSet, VecDeque};
@@ -54,6 +54,9 @@ impl Compilation {
       .normal_module_factory
       .create(module_id, &self.loader_registry);
     let module_path = create_data.resource_path.clone();
+    self
+      .file_dependencies
+      .insert(Self::normalize_path(&module_path)?);
     let source = self.load_module_source(&create_data).await?;
 
     // 这里每次 build module 都临时创建 SwcCompiler。

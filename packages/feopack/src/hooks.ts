@@ -100,6 +100,7 @@ export function createCompilerHooks() {
     afterDone: new MiniSeriesHook(),
     failed: new MiniSeriesHook(),
     watchRun: new MiniSeriesHook(),
+    watchClose: new MiniSeriesHook(),
     compile: new MiniSeriesHook(),
     afterPlugins: new MiniSeriesHook(),
     invalid: new MiniSeriesHook(),

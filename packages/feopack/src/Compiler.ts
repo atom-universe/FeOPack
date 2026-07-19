@@ -9,6 +9,7 @@ import {
 import { runJsLoaders } from './loader-runner/snapshot'
 import { JsLoaderState } from './loader-runner/types'
 import { CompilerHooks, createCompilerHooks } from './hooks'
+import { Watching, WatchHandler, WatchOptions } from './Watching'
 
 export class Compiler {
   #inner?: binding.Rspack // Rust 那一侧对应的 Compiler
@@ -16,6 +17,9 @@ export class Compiler {
   options: FeopackOptions
   context: string
   compilation?: Compilation
+  watching?: Watching
+  modifiedFiles?: ReadonlySet<string>
+  removedFiles?: ReadonlySet<string>
   hooks: CompilerHooks
   webpack: Record<string, never>
   rspack: Record<string, never>
@@ -145,5 +149,13 @@ export class Compiler {
       this.hooks.failed.call(err)
       throw err
     }
+  }
+
+  watch(watchOptions: WatchOptions, handler: WatchHandler): Watching {
+    if (this.watching) {
+      throw new Error('Concurrent watch is not supported')
+    }
+    this.watching = new Watching(this, watchOptions, handler)
+    return this.watching
   }
 }

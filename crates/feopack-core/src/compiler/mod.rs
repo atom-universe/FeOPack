@@ -53,6 +53,17 @@ impl Compiler {
     self.js_hooks_adapter = adapter;
   }
 
+  pub fn file_dependencies(&self) -> Vec<String> {
+    let mut dependencies = self
+      .compilation
+      .file_dependencies
+      .iter()
+      .map(|path| path.to_string_lossy().into_owned())
+      .collect::<Vec<_>>();
+    dependencies.sort();
+    dependencies
+  }
+
   pub(crate) fn hooks(&self) -> &CompilerHooks {
     self.plugin_driver.compiler_hooks()
   }

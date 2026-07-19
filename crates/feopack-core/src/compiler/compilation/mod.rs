@@ -6,7 +6,7 @@ use super::normal_module_factory::NormalModuleFactory;
 use crate::loader::inline_request::InlineRequest;
 use crate::loader::{JsLoaderRunner, LoaderEnforce, LoaderRegistry, LoaderRule};
 use crate::module_graph::ModuleGraph;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -80,6 +80,7 @@ pub struct Compilation {
   pub module_graph: ModuleGraph,
   pub chunk_graph: ChunkGraph,
   pub assets: Vec<GeneratedAsset>,
+  pub file_dependencies: HashSet<PathBuf>,
   pub(crate) module_sources: HashMap<String, String>,
   pub(crate) file_source_cache: HashMap<PathBuf, String>,
   pub(crate) loader_registry: LoaderRegistry,
@@ -110,6 +111,7 @@ impl Compilation {
       module_graph: ModuleGraph::new(),
       chunk_graph: ChunkGraph::default(),
       assets: Vec::new(),
+      file_dependencies: HashSet::new(),
       module_sources: HashMap::new(),
       file_source_cache: HashMap::new(),
       loader_registry,
