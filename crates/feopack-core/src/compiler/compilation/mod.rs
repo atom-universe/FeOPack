@@ -117,8 +117,4 @@ impl Compilation {
       js_loader_runner,
     }
   }
-
-  pub async fn make(&mut self) -> Result<(), String> {
-    self.build_module_graph().await
-  }
 }

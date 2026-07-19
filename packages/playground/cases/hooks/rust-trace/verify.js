@@ -7,9 +7,8 @@ module.exports = function verify(config) {
   const lines = fs.readFileSync(logPath, 'utf8').trim().split(/\r?\n/);
 
   assert.deepStrictEqual(lines, [
-    'beforeRun',
+    'make',
     'emit',
     'assetEmitted main.js',
-    'done',
   ]);
 };

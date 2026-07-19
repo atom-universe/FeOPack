@@ -86,7 +86,9 @@ export class MiniSeriesHook {
 
 export function createCompilerHooks() {
   return {
+    thisCompilation: new MiniSeriesHook(),
     beforeRun: new MiniSeriesHook(),
+    run: new MiniSeriesHook(),
     beforeCompile: new MiniSeriesHook(),
     make: new MiniSeriesHook(),
     compilation: new MiniSeriesHook(),

@@ -76,40 +76,74 @@ export class Compiler {
           throw new Error(`feopack js loader: ${message}`)
         }
       },
+      // Rspack 为每个 native hook 注册单独的 JS tap adapter；这里压成一个事件回调。
+      async (event: {
+        name: string
+        filename?: string
+        targetPath?: string
+      }) => {
+        const compilation = this.compilation
+        if (!compilation) {
+          throw new Error(`feopack js hook ${event.name}: compilation is not ready`)
+        }
+
+        switch (event.name) {
+          case 'thisCompilation':
+            await this.hooks.thisCompilation.promise(compilation, {})
+            break
+          case 'compilation':
+            await this.hooks.compilation.promise(compilation, {})
+            break
+          case 'make':
+            await this.hooks.make.promise(compilation)
+            break
+          case 'emit':
+            await this.hooks.emit.promise(compilation)
+            break
+          case 'assetEmitted':
+            await this.hooks.assetEmitted.promise(event.filename, {
+              targetPath: event.targetPath,
+            })
+            break
+          case 'afterEmit':
+            await this.hooks.afterEmit.promise(compilation)
+            break
+        }
+      },
     )
 
     return this.#inner!
   }
 
   async #build() {
-    const compilationStub = { compiler: this }
-
-    await this.hooks.beforeRun.promise(this)
-    await this.hooks.beforeCompile.promise({})
-    await this.hooks.make.promise(compilationStub)
-    await this.hooks.compilation.promise(compilationStub)
-
     // rust, 启动！
     const inner = this.#getInner()
+    this.compilation = new Compilation(this, inner)
+    await inner.build()
+    return this.compilation
+  }
+
+  async compile() {
+    const params = {}
+    await this.hooks.beforeCompile.promise(params)
+    this.hooks.compile.call(params)
+    const compilation = await this.#build()
+    await this.hooks.afterCompile.promise(compilation)
+    return compilation
+  }
+
+  async run() {
     try {
-      await inner.build()
+      await this.hooks.beforeRun.promise(this)
+      await this.hooks.run.promise(this)
+      const compilation = await this.compile()
+      const stats = compilation.getStats()
+      await this.hooks.done.promise(stats)
+      this.hooks.afterDone.call(stats)
+      return stats
     } catch (err) {
       this.hooks.failed.call(err)
       throw err
     }
-
-    this.compilation = new Compilation(this, inner)
-    await this.hooks.afterEmit.promise(this.compilation)
-    const stats = this.compilation.getStats()
-    await this.hooks.done.promise(stats)
-    this.hooks.afterDone.call(stats)
-  }
-
-  async compile() {
-    await this.#build()
-  }
-
-  async run() {
-    await this.compile()
   }
 }

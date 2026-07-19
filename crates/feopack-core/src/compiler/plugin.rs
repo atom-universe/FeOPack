@@ -1,6 +1,6 @@
-use super::Compiler;
 use super::compilation::CompilationOptions;
 use super::hooks::CompilerHooks;
+use super::Compiler;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -98,12 +98,12 @@ impl Plugin for TraceLifecyclePlugin {
       Err(err) => return Err(format!("remove old hook log failed: {}", err)),
     }
 
-    let before_run_log = Arc::clone(&log_file);
+    let make_log = Arc::clone(&log_file);
     context
       .compiler_hooks
-      .before_run
+      .make
       .tap("TraceLifecyclePlugin", move |_| {
-        Self::append_line(&before_run_log, "beforeRun")
+        Self::append_line(&make_log, "make")
       });
 
     let emit_log = Arc::clone(&log_file);
@@ -123,14 +123,6 @@ impl Plugin for TraceLifecyclePlugin {
           &asset_emitted_log,
           &format!("assetEmitted {}", ctx.filename),
         )
-      });
-
-    let done_log = Arc::clone(&log_file);
-    context
-      .compiler_hooks
-      .done
-      .tap("TraceLifecyclePlugin", move |_| {
-        Self::append_line(&done_log, "done")
       });
 
     Ok(())

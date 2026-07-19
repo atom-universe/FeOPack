@@ -1,9 +1,11 @@
 #![deny(clippy::all)]
 
+mod js_hooks_adapter;
 mod js_loader;
 mod js_loader_types;
 
 use feopack_binding::options::RawOptions;
+use js_hooks_adapter::{create_js_hooks_adapter, JsCompilerHookEventInput, JsHooksAdapterTsFn};
 use js_loader::{create_js_loader_runner, JsLoaderRunnerTsFn};
 use js_loader_types::{JsLoaderContextInput, JsLoaderResultOutput};
 use napi::bindgen_prelude::*;
@@ -16,7 +18,8 @@ use feopack_core::*;
 #[napi]
 pub struct Rspack {
   compiler: Box<Compiler>,
-  js_runner: Option<Arc<JsLoaderRunnerTsFn>>,
+  js_loader_runner: Option<Arc<JsLoaderRunnerTsFn>>,
+  js_hooks_adapter: Option<Arc<JsHooksAdapterTsFn>>,
 }
 
 #[napi]
@@ -25,10 +28,10 @@ impl Rspack {
   pub fn new(
     options: RawOptions,
     // 这里有一个 FFI 参数，从 js 那那边拿到 js loader runner 的句柄
-    #[napi(
-      ts_arg_type = "(ctx: JsLoaderContextInput) => Promise<JsLoaderResultOutput>"
-    )]
-    js_runner: Option<Function<JsLoaderContextInput, Promise<JsLoaderResultOutput>>>,
+    #[napi(ts_arg_type = "(ctx: JsLoaderContextInput) => Promise<JsLoaderResultOutput>")]
+    js_loader_runner: Option<Function<JsLoaderContextInput, Promise<JsLoaderResultOutput>>>,
+    #[napi(ts_arg_type = "(event: JsCompilerHookEventInput) => Promise<void>")]
+    js_hooks_adapter: Option<Function<JsCompilerHookEventInput, Promise<()>>>,
   ) -> Result<Self> {
     // 读 js 那边 注册的 loader
     let module_rules = options
@@ -62,7 +65,7 @@ impl Rspack {
       apply_builtin_plugin(&plugin_name, &mut compiler).map_err(Error::from_reason)?;
     }
 
-    let js_runner = js_runner
+    let js_loader_runner = js_loader_runner
       .map(|runner_fn| -> Result<Arc<JsLoaderRunnerTsFn>> {
         let ts_fn: JsLoaderRunnerTsFn = runner_fn
           .build_threadsafe_function::<JsLoaderContextInput>()
@@ -72,17 +75,33 @@ impl Rspack {
       })
       .transpose()?;
 
+    let js_hooks_adapter = js_hooks_adapter
+      .map(|adapter_fn| -> Result<Arc<JsHooksAdapterTsFn>> {
+        let ts_fn: JsHooksAdapterTsFn = adapter_fn
+          .build_threadsafe_function::<JsCompilerHookEventInput>()
+          .max_queue_size::<0>()
+          .build()?;
+        Ok(Arc::new(ts_fn))
+      })
+      .transpose()?;
+
     Ok(Self {
       compiler: Box::new(compiler),
-      js_runner,
+      js_loader_runner,
+      js_hooks_adapter,
     })
   }
 
   #[napi]
   pub async unsafe fn build(&mut self) -> Result<()> {
-    if let Some(runner_ref) = self.js_runner.as_ref() {
+    if let Some(runner_ref) = self.js_loader_runner.as_ref() {
       let runner = create_js_loader_runner(Arc::clone(runner_ref));
       self.compiler.set_js_loader_runner(Some(runner));
+    }
+
+    if let Some(adapter_ref) = self.js_hooks_adapter.as_ref() {
+      let adapter = create_js_hooks_adapter(Arc::clone(adapter_ref));
+      self.compiler.set_js_hooks_adapter(Some(adapter));
     }
 
     self

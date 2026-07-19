@@ -9,8 +9,8 @@ module.exports = function verify(config) {
   assert.deepStrictEqual(lines, [
     'beforeRun',
     'beforeCompile',
-    'make',
     'compilation',
+    'make',
     'afterEmit',
     'done',
   ])

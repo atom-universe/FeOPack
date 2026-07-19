@@ -1,7 +1,6 @@
 pub mod compilation;
 mod emit;
 mod hooks;
-mod lifecycle;
 mod normal_module_factory;
 mod plugin;
 
@@ -9,13 +8,29 @@ use crate::loader::JsLoaderRunner;
 use compilation::{Compilation, CompilationOptions};
 use hooks::CompilerHooks;
 use plugin::PluginDriver;
-pub use plugin::{Plugin, apply_builtin_plugin};
+pub use plugin::{apply_builtin_plugin, Plugin};
+use std::future::Future;
+use std::pin::Pin;
 use std::result::Result;
+use std::sync::Arc;
 
+// Rspack binding 为每个 compiler hook 提供独立 adapter；mini 版统一用一个事件回调桥接。
+pub struct JsCompilerHookEvent {
+  pub name: &'static str,
+  pub filename: Option<String>,
+  pub target_path: Option<String>,
+}
+
+pub type JsHooksAdapterFuture = Pin<Box<dyn Future<Output = Result<(), String>> + Send>>;
+pub type JsHooksAdapter = Arc<dyn Fn(JsCompilerHookEvent) -> JsHooksAdapterFuture + Send + Sync>;
+
+// 主流程与 Rspack 保持相同的职责划分：Compiler 负责阶段编排和触发 hooks，
+// Compilation 负责构建 module graph、seal 和生成 assets 等具体工作。
 pub struct Compiler {
   compilation: Compilation,
   options: CompilationOptions,
   js_loader_runner: Option<JsLoaderRunner>,
+  js_hooks_adapter: Option<JsHooksAdapter>,
   plugin_driver: PluginDriver,
 }
 
@@ -25,6 +40,7 @@ impl Compiler {
       compilation: Compilation::new(options.clone(), None),
       options,
       js_loader_runner: None,
+      js_hooks_adapter: None,
       plugin_driver: PluginDriver::default(),
     }
   }
@@ -33,45 +49,79 @@ impl Compiler {
     self.js_loader_runner = runner;
   }
 
+  pub fn set_js_hooks_adapter(&mut self, adapter: Option<JsHooksAdapter>) {
+    self.js_hooks_adapter = adapter;
+  }
+
   pub(crate) fn hooks(&self) -> &CompilerHooks {
     self.plugin_driver.compiler_hooks()
   }
 
+  // 为什么要有 hooks 了还要 hooks_mut呢
+  // 主要是照顾 rust 侧的 mut 机制，在编译期间就确定权限
   #[allow(dead_code)]
   pub(crate) fn hooks_mut(&mut self) -> &mut CompilerHooks {
     self.plugin_driver.compiler_hooks_mut()
   }
 
   pub async fn build(&mut self) -> Result<(), String> {
-    self.initialize()?;
-    self.before_run()?;
-    self.run_lifecycle()?;
     self.compilation = Compilation::new(self.options.clone(), self.js_loader_runner.clone());
     self.compile().await?;
-    self.done()?;
+    self.compile_done().await?;
     Ok(())
   }
 
-  pub async fn compile(&mut self) -> Result<(), String> {
-    self.before_compile()?;
-    self.compile_lifecycle()?;
-    self.compilation.make().await?;
+  async fn compile(&mut self) -> Result<(), String> {
+    self.build_module_graph().await?;
     self.compilation.seal().await?;
-    self.after_compile()?;
-    if !self.should_emit()? {
+    Ok(())
+  }
+
+  async fn compile_done(&mut self) -> Result<(), String> {
+    let should_emit = self.hooks().should_emit.call(&())?.unwrap_or(true);
+    if !should_emit {
       println!("[rust compiler lifecycle] should_emit returned false, skip emit");
       return Ok(());
     }
     self.emit_assets().await?;
     Ok(())
   }
+
+  async fn build_module_graph(&mut self) -> Result<(), String> {
+    self
+      .call_js_compiler_hook("thisCompilation", None, None)
+      .await?;
+    self
+      .call_js_compiler_hook("compilation", None, None)
+      .await?;
+    self.hooks().make.call(&())?;
+    self.call_js_compiler_hook("make", None, None).await?;
+    self.compilation.build_module_graph().await
+  }
+
+  async fn call_js_compiler_hook(
+    &self,
+    name: &'static str,
+    filename: Option<String>,
+    target_path: Option<String>,
+  ) -> Result<(), String> {
+    let Some(adapter) = &self.js_hooks_adapter else {
+      return Ok(());
+    };
+    adapter(JsCompilerHookEvent {
+      name,
+      filename,
+      target_path,
+    })
+    .await
+  }
 }
 
 #[cfg(test)]
 mod tests {
-  use super::Compiler;
   use super::compilation::{CompilationOptions, Output};
-  use crate::compiler::compilation::GeneratedAsset;
+  use super::hooks::AssetEmittedContext;
+  use super::Compiler;
   use std::path::Path;
   use std::sync::{Arc, Mutex};
 
@@ -89,25 +139,19 @@ mod tests {
   }
 
   #[test]
-  fn lifecycle_calls_registered_compiler_hook() {
+  fn compiler_hook_calls_registered_tap() {
     let calls = Arc::new(Mutex::new(Vec::new()));
     let mut compiler = test_compiler();
 
-    let before_run_calls = Arc::clone(&calls);
-    compiler
-      .hooks_mut()
-      .before_run
-      .tap("test-before-run", move |_| {
-        before_run_calls
-          .lock()
-          .expect("lock calls")
-          .push("before_run");
-        Ok(())
-      });
+    let make_calls = Arc::clone(&calls);
+    compiler.hooks_mut().make.tap("test-make", move |_| {
+      make_calls.lock().expect("lock calls").push("make");
+      Ok(())
+    });
 
-    compiler.before_run().expect("before_run should pass");
+    compiler.hooks().make.call(&()).expect("make should pass");
 
-    assert_eq!(*calls.lock().expect("lock calls"), vec!["before_run"]);
+    assert_eq!(*calls.lock().expect("lock calls"), vec!["make"]);
   }
 
   #[test]
@@ -126,13 +170,12 @@ mod tests {
       });
 
     compiler
-      .asset_emitted(
-        &GeneratedAsset {
-          filename: "main.js".to_string(),
-          source: String::new(),
-        },
-        Path::new("/tmp/feopack-test/dist/main.js"),
-      )
+      .hooks()
+      .asset_emitted
+      .call(&AssetEmittedContext {
+        filename: "main.js".to_string(),
+        target_path: Path::new("/tmp/feopack-test/dist/main.js").to_path_buf(),
+      })
       .expect("asset_emitted should pass");
 
     assert_eq!(
@@ -153,6 +196,13 @@ mod tests {
       .should_emit
       .tap("skip-emit", |_| Ok(Some(false)));
 
-    assert!(!compiler.should_emit().expect("should_emit should pass"));
+    assert_eq!(
+      compiler
+        .hooks()
+        .should_emit
+        .call(&())
+        .expect("should_emit should pass"),
+      Some(false)
+    );
   }
 }

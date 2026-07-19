@@ -103,11 +103,11 @@ pnpm test chunk/basic
 | JS Loader Bridge | ✅ | ✅ | 已支持从 Rust 调用 Node 侧 JS loader runner |
 | Loader pitch / normal | ✅ | ✅ | Feopack 已支持简化版 pitch / normal 执行流 |
 | Inline Loader Request | ✅ | ✅ | 已支持类似 `-!loader!resource` 的基础解析 |
-| Plugin 基础机制 | ✅ | 🚧 | Feopack 目前只有 compiler lifecycle 和 hook 占位结构，后续会补 tap 注册与调度 |
-| JS Plugin 兼容 | ✅ | 🚧 | 后续计划支持 `plugin.apply(compiler)` 这一类入口 |
-| Compilation 级 Hooks | ✅ | 🚧 | 比 compiler hooks 更贴近 module/chunk/assets，例如 `processAssets` |
-| Watch Mode | ✅ | 🚧 | 暂未实现，属于后续 mini rspack 能力 |
+| Plugin 基础机制 | ✅ | ✅ | 已有简化的 `Plugin`、`PluginDriver`、compiler hooks 和 tap 调度 |
+| JS Plugin 兼容 | ✅ | ✅ | 支持 `plugin.apply(compiler)` 和部分常用 compiler hooks，已跑通一个 npm plugin case |
+| Watch Mode | ✅ | 🚧 | 下一阶段：监听文件变化并复用 Compiler 发起新一轮 compilation |
 | Incremental Rebuild | ✅ | 🚧 | 暂未实现 |
+| Compilation 级 Hooks | ✅ | 🚧 | 等真实 plugin case 需要时再补，例如 `processAssets` |
 | HMR | ✅ | 🚧 | 暂未实现 |
 | Persistent Cache | ✅ | 🚧 | 暂未实现 |
 | Source Map | ✅ | 🚧 | 暂未实现完整 source map 支持 |
@@ -116,6 +116,10 @@ pnpm test chunk/basic
 | Module Federation | ✅ | ❌ | 当前学习阶段暂不计划实现 |
 | 生产级 Resolver | ✅ | ❌ | Feopack 只会保留学习所需的简化解析能力 |
 | 完整 Webpack/Rspack 配置兼容 | ✅ | ❌ | Feopack 不追求完整兼容，只挑核心机制学习 |
+
+当前建议推进顺序是：先完成 Compiler hooks 的最小闭环，再实现 Watch Mode 和最小增量重建，最后根据真实 plugin case 补 Compilation hooks。
+
+Compiler hooks 和 Compilation hooks 不是能力等级，而是归属不同：Compiler hooks 描述整次构建的阶段，例如 `beforeRun`、`make` 和 `done`；Compilation hooks 描述一次编译内部对 module、chunk 和 assets 的处理，例如 `buildModule` 和 `processAssets`。Feopack 当前只实现了前者的最小子集，后者等实际 case 需要时再补。
 
 ## 📝 说明
 

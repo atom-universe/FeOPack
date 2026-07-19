@@ -24,8 +24,14 @@ export interface RawOptions {
   rustPlugins?: Array<string>
 }
 export declare class Rspack {
-  constructor(options: RawOptions, jsRunner?: (ctx: JsLoaderContextInput) => Promise<JsLoaderResultOutput>)
+  constructor(options: RawOptions, jsLoaderRunner?: (ctx: JsLoaderContextInput) => Promise<JsLoaderResultOutput>, jsHooksAdapter?: (event: JsCompilerHookEventInput) => Promise<void>)
   build(): Promise<void>
+}
+
+export interface JsCompilerHookEventInput {
+  name: string
+  filename?: string
+  targetPath?: string
 }
 
 export interface JsLoaderContextInput {

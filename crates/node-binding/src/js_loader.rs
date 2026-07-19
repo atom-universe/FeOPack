@@ -15,14 +15,12 @@ pub type JsLoaderRunnerTsFn = ThreadsafeFunction<
   0,
 >;
 
-pub fn create_js_loader_runner(
-  js_runner: Arc<JsLoaderRunnerTsFn>,
-) -> JsLoaderRunner {
+pub fn create_js_loader_runner(js_loader_runner: Arc<JsLoaderRunnerTsFn>) -> JsLoaderRunner {
   Arc::new(move |req: JsLoaderRequest| {
-    let js_runner = Arc::clone(&js_runner);
+    let js_loader_runner = Arc::clone(&js_loader_runner);
 
     Box::pin(async move {
-      let output = js_runner
+      let output = js_loader_runner
         .call_async(JsLoaderContextInput {
           // normal | pitch
           loader_state: req.loader_state,
