@@ -5,10 +5,14 @@
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/napi-rs/package-template.git"
+    "url": "git+ssh://git@github.com/atom-universe/FeOPack.git"
   },
   "license": "MIT",
   "browser": "browser.js",
+  "workspaces": [
+    "packages/*",
+    "crates/node-binding"
+  ],
   "keywords": [
     "napi-rs",
     "NAPI",
@@ -39,6 +43,7 @@
     "access": "public"
   },
   "scripts": {
+    "build": "napi build --platform --release",
     "build:crates": "just build-crates",
     "build:update": "just build-update",
     "build": "npm run build:crates",
