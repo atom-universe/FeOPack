@@ -16,6 +16,11 @@ use std::sync::Arc;
 use feopack_core::*;
 
 #[napi]
+pub fn plus100(num: i32) -> i32 {
+  num + 100
+}
+
+#[napi]
 pub struct Rspack {
   compiler: Box<Compiler>,
   js_loader_runner: Option<Arc<JsLoaderRunnerTsFn>>,
@@ -92,6 +97,9 @@ impl Rspack {
     })
   }
 
+  /// # Safety
+  /// This function is unsafe because it interacts with native resources.
+  /// Ensure the compiler is properly initialized before calling.
   #[napi]
   pub async unsafe fn build(&mut self) -> Result<()> {
     if let Some(runner_ref) = self.js_loader_runner.as_ref() {
